@@ -22,14 +22,28 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const ProtectedRoute = ({ children, role }: { children: React.ReactNode; role?: string }) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
   if (!isAuthenticated) return <Navigate to="/" replace />;
   if (role && user?.role !== role) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
   return <>{children}</>;
 };
 
 const LoginRoute = () => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
   if (isAuthenticated) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
   return <Login />;
 };
