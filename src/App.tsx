@@ -1,26 +1,68 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import Login from "./pages/Login";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import Enquiries from "./pages/admin/Enquiries";
+import Clients from "./pages/admin/Clients";
+import Projects from "./pages/admin/Projects";
+import Support from "./pages/admin/Support";
+import SEOTracking from "./pages/admin/SEOTracking";
+import Reports from "./pages/admin/Reports";
+import ActivityLog from "./pages/admin/ActivityLog";
+import ClientDashboard from "./pages/client/ClientDashboard";
+import ClientProjects from "./pages/client/ClientProjects";
+import ClientSupport from "./pages/client/ClientSupport";
+import ClientReports from "./pages/client/ClientReports";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const ProtectedRoute = ({ children, role }: { children: React.ReactNode; role?: string }) => {
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/" replace />;
+  if (role && user?.role !== role) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
+  return <>{children}</>;
+};
+
+const LoginRoute = () => {
+  const { isAuthenticated, user } = useAuth();
+  if (isAuthenticated) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
+  return <Login />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<LoginRoute />} />
+            {/* Admin routes */}
+            <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin/enquiries" element={<ProtectedRoute role="admin"><Enquiries /></ProtectedRoute>} />
+            <Route path="/admin/clients" element={<ProtectedRoute role="admin"><Clients /></ProtectedRoute>} />
+            <Route path="/admin/projects" element={<ProtectedRoute role="admin"><Projects /></ProtectedRoute>} />
+            <Route path="/admin/projects/:projectId" element={<ProtectedRoute role="admin"><Projects /></ProtectedRoute>} />
+            <Route path="/admin/support" element={<ProtectedRoute role="admin"><Support /></ProtectedRoute>} />
+            <Route path="/admin/seo" element={<ProtectedRoute role="admin"><SEOTracking /></ProtectedRoute>} />
+            <Route path="/admin/reports" element={<ProtectedRoute role="admin"><Reports /></ProtectedRoute>} />
+            <Route path="/admin/activity" element={<ProtectedRoute role="admin"><ActivityLog /></ProtectedRoute>} />
+            {/* Client routes */}
+            <Route path="/client" element={<ProtectedRoute role="client"><ClientDashboard /></ProtectedRoute>} />
+            <Route path="/client/projects" element={<ProtectedRoute role="client"><ClientProjects /></ProtectedRoute>} />
+            <Route path="/client/support" element={<ProtectedRoute role="client"><ClientSupport /></ProtectedRoute>} />
+            <Route path="/client/reports" element={<ProtectedRoute role="client"><ClientReports /></ProtectedRoute>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
