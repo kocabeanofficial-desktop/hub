@@ -76,19 +76,22 @@ export interface DbReport {
 
 export interface DbIntakeSubmission {
   id: string;
-  client_id: string | null;
-  project_id: string | null;
-  source: string;
-  submitter_name: string | null;
-  submitter_email: string | null;
-  submitter_phone: string | null;
+  full_name: string | null;
   business_name: string | null;
-  requested_services: string | null;
-  raw_payload: Record<string, unknown>;
+  email: string | null;
+  phone: string | null;
+  business_type: string | null;
+  business_description: string | null;
+  has_logo: boolean;
+  logo_url: string | null;
+  has_domain: boolean;
+  domain_name: string | null;
+  needs_email: boolean;
+  website_goal: string | null;
+  selected_pages: string | null;
+  has_images: boolean;
   status: string;
-  processing_notes: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 export interface DbAutomationEvent {
