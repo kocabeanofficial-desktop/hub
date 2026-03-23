@@ -4,8 +4,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, FolderOpen, MessageSquare, FileText,
-  Activity, Search, LogOut, Menu, X, Globe, Inbox,
+  Activity, Search, LogOut, Menu, X, Inbox,
 } from "lucide-react";
+import kocaBeanLogo from "@/assets/koca-bean-logo.png";
 
 const adminNav = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
@@ -52,8 +53,8 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
       )}>
         {/* Brand */}
         <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border">
-          <div className="flex items-center justify-center w-9 h-9 rounded-xl gradient-brand shadow-sm">
-            <Globe className="h-5 w-5 text-sidebar-primary-foreground" />
+          <div className="flex items-center justify-center w-9 h-9">
+            <img src={kocaBeanLogo} alt="Koca Bean" className="w-9 h-9 object-contain" />
           </div>
           <div>
             <h1 className="text-sm font-heading font-bold text-sidebar-foreground tracking-tight">Koca Bean</h1>
