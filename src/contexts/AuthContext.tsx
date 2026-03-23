@@ -46,9 +46,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const buildAuthUser = useCallback(async (supabaseUser: User): Promise<AuthUser | null> => {
     const resolved = await resolveRole(supabaseUser.id);
     if (!resolved) return null;
+    const email = supabaseUser.email ?? "";
+    const name = supabaseUser.user_metadata?.full_name ?? email.split("@")[0];
     return {
       id: supabaseUser.id,
-      email: supabaseUser.email ?? "",
+      email,
+      name,
       role: resolved.role,
       clientId: resolved.clientId,
     };
