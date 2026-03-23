@@ -1,15 +1,18 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { mockEnquiries } from "@/data/mockData";
+import { useIntakeSubmissions } from "@/hooks/useSupabaseData";
 import { useState } from "react";
 import { Search } from "lucide-react";
 
 const Enquiries = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const { data: enquiries = [], isLoading } = useIntakeSubmissions();
 
-  const filtered = mockEnquiries.filter((e) => {
-    const matchesSearch = e.name.toLowerCase().includes(search.toLowerCase()) || e.email.toLowerCase().includes(search.toLowerCase());
+  const filtered = enquiries.filter((e) => {
+    const name = (e.submitter_name || e.business_name || "").toLowerCase();
+    const email = (e.submitter_email || "").toLowerCase();
+    const matchesSearch = name.includes(search.toLowerCase()) || email.includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || e.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -65,19 +68,20 @@ const Enquiries = () => {
                 {filtered.map((enq) => (
                   <tr key={enq.id} className="hover:bg-muted/20 transition-colors cursor-pointer">
                     <td className="px-4 py-3.5">
-                      <p className="font-medium text-foreground">{enq.name}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{enq.email}</p>
+                      <p className="font-medium text-foreground">{enq.submitter_name || enq.business_name || "Unknown"}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{enq.submitter_email}</p>
                     </td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{enq.service}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{enq.requested_services || "—"}</td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{enq.source}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{enq.createdAt}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(enq.created_at).toLocaleDateString("en-ZA")}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={enq.status} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {filtered.length === 0 && (
+          {isLoading && <div className="px-4 py-12 text-center text-sm text-muted-foreground">Loading...</div>}
+          {!isLoading && filtered.length === 0 && (
             <div className="px-4 py-12 text-center text-sm text-muted-foreground">No enquiries found.</div>
           )}
         </div>

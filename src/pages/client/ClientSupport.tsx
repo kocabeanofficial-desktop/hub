@@ -1,11 +1,12 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
-import { mockSupportTickets } from "@/data/mockData";
+import { useClientTasks } from "@/hooks/useSupabaseData";
 
 const ClientSupport = () => {
   const { user } = useAuth();
-  const tickets = mockSupportTickets.filter((t) => t.clientId === user?.clientId);
+  const { data: tasks = [], isLoading } = useClientTasks(user?.clientId);
+  const tickets = tasks.filter((t) => t.task_type === "support");
 
   return (
     <DashboardLayout>
@@ -25,16 +26,17 @@ const ClientSupport = () => {
               <tbody className="divide-y divide-border">
                 {tickets.map((t) => (
                   <tr key={t.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3.5 font-medium text-foreground">{t.subject}</td>
+                    <td className="px-4 py-3.5 font-medium text-foreground">{t.title}</td>
                     <td className="px-4 py-3.5 hidden sm:table-cell"><StatusBadge status={t.priority} /></td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{t.createdAt}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{new Date(t.created_at).toLocaleDateString("en-ZA")}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={t.status} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {tickets.length === 0 && <p className="px-4 py-12 text-sm text-muted-foreground text-center">No support tickets.</p>}
+          {isLoading && <div className="px-4 py-12 text-center text-sm text-muted-foreground">Loading...</div>}
+          {!isLoading && tickets.length === 0 && <p className="px-4 py-12 text-sm text-muted-foreground text-center">No support tickets.</p>}
         </div>
       </div>
     </DashboardLayout>

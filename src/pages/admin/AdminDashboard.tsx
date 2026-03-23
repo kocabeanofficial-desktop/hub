@@ -4,16 +4,23 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import {
   Inbox, Users, FolderOpen, Globe, MessageSquare, FileText, Activity,
 } from "lucide-react";
-import { mockEnquiries, mockClients, mockProjects, mockSupportTickets, mockReports, mockActivityEvents } from "@/data/mockData";
+import { useClients, useProjects, useIntakeSubmissions, useReports, useAutomationEvents, useTasks } from "@/hooks/useSupabaseData";
 import { Link } from "react-router-dom";
 
 const AdminDashboard = () => {
-  const openEnquiries = mockEnquiries.filter((e) => e.status === "new" || e.status === "contacted").length;
-  const activeClients = mockClients.filter((c) => c.status === "active").length;
-  const activeProjects = mockProjects.filter((p) => p.status === "active").length;
-  const websitesInProgress = mockProjects.filter((p) => p.status === "active" && p.buildStage !== "live").length;
-  const openSupport = mockSupportTickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
-  const pendingReports = mockReports.filter((r) => r.status === "draft").length;
+  const { data: enquiries = [] } = useIntakeSubmissions();
+  const { data: clients = [] } = useClients();
+  const { data: projects = [] } = useProjects();
+  const { data: tasks = [] } = useTasks();
+  const { data: reports = [] } = useReports();
+  const { data: activityEvents = [] } = useAutomationEvents();
+
+  const openEnquiries = enquiries.filter((e) => e.status === "new" || e.status === "contacted").length;
+  const activeClients = clients.filter((c) => c.status === "active").length;
+  const activeProjects = projects.filter((p) => p.stage !== "completed" && p.stage !== "cancelled").length;
+  const websitesInProgress = projects.filter((p) => p.project_type === "website" && p.stage !== "live" && p.stage !== "completed").length;
+  const openSupport = tasks.filter((t) => t.task_type === "support" && (t.status === "todo" || t.status === "in_progress")).length;
+  const pendingReports = reports.filter((r) => r.status === "draft").length;
 
   return (
     <DashboardLayout>
@@ -40,16 +47,18 @@ const AdminDashboard = () => {
             <Link to="/admin/activity" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">View all →</Link>
           </div>
           <div className="divide-y divide-border">
-            {mockActivityEvents.slice(0, 5).map((event) => (
+            {activityEvents.length === 0 && (
+              <p className="px-4 py-8 text-sm text-muted-foreground text-center">No activity yet.</p>
+            )}
+            {activityEvents.slice(0, 5).map((event) => (
               <div key={event.id} className="px-4 sm:px-5 py-3.5 flex items-start gap-3 hover:bg-muted/30 transition-colors">
                 <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center mt-0.5">
                   <Activity className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground">{event.description}</p>
+                  <p className="text-sm text-foreground">{event.message || event.event_type}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(event.timestamp).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })}
-                    {event.clientName && ` · ${event.clientName}`}
+                    {new Date(event.created_at).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })}
                   </p>
                 </div>
                 <StatusBadge status={event.status} />
@@ -67,11 +76,14 @@ const AdminDashboard = () => {
               <Link to="/admin/enquiries" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">View all →</Link>
             </div>
             <div className="divide-y divide-border">
-              {mockEnquiries.slice(0, 3).map((enq) => (
+              {enquiries.length === 0 && (
+                <p className="px-4 py-6 text-sm text-muted-foreground text-center">No enquiries yet.</p>
+              )}
+              {enquiries.slice(0, 3).map((enq) => (
                 <div key={enq.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{enq.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{enq.service}</p>
+                    <p className="text-sm font-medium text-foreground">{enq.submitter_name || enq.business_name || "Unknown"}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{enq.requested_services || enq.source}</p>
                   </div>
                   <StatusBadge status={enq.status} />
                 </div>
@@ -86,11 +98,13 @@ const AdminDashboard = () => {
               <Link to="/admin/support" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">View all →</Link>
             </div>
             <div className="divide-y divide-border">
-              {mockSupportTickets.filter((t) => t.status !== "closed" && t.status !== "resolved").slice(0, 3).map((ticket) => (
+              {tasks.filter((t) => t.task_type === "support" && t.status !== "done").length === 0 && (
+                <p className="px-4 py-6 text-sm text-muted-foreground text-center">No open support tickets.</p>
+              )}
+              {tasks.filter((t) => t.task_type === "support" && t.status !== "done").slice(0, 3).map((ticket) => (
                 <div key={ticket.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{ticket.subject}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{ticket.clientName}</p>
+                    <p className="text-sm font-medium text-foreground">{ticket.title}</p>
                   </div>
                   <StatusBadge status={ticket.priority} />
                 </div>
