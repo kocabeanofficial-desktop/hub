@@ -2,12 +2,20 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useClients, useProjects, useTasks, useReports, useContacts } from "@/hooks/useSupabaseData";
 import { useState } from "react";
-import { Search, ArrowRight } from "lucide-react";
+import { Search, ArrowRight, Plus, Pencil, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { ClientFormModal, type ClientFormData } from "@/components/clients/ClientFormModal";
 
 const Clients = () => {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+
   const { data: clients = [], isLoading } = useClients();
   const { data: projects = [] } = useProjects();
   const { data: tasks = [] } = useTasks();
@@ -25,6 +33,52 @@ const Clients = () => {
   const clientReports = selected ? reports.filter((r) => r.client_id === selected) : [];
   const clientContact = selected ? contacts.find((c) => c.client_id === selected && c.is_primary) : null;
 
+  const handleAdd = () => {
+    setEditingClient(null);
+    setModalOpen(true);
+  };
+
+  const handleEdit = (e: React.MouseEvent, client: any) => {
+    e.stopPropagation();
+    setEditingClient(client);
+    setModalOpen(true);
+  };
+
+  const handleSubmit = async (data: ClientFormData) => {
+    setSaving(true);
+    try {
+      const payload = {
+        business_name: data.business_name.trim(),
+        trading_name: data.trading_name.trim() || null,
+        company_registration: data.company_registration.trim() || null,
+        vat_number: data.vat_number.trim() || null,
+        industry: data.industry.trim() || null,
+        website_url: data.website_url.trim() || null,
+        notes: data.notes.trim() || null,
+        status: data.status,
+      };
+
+      if (editingClient) {
+        const { error } = await supabase
+          .from("clients")
+          .update(payload)
+          .eq("id", editingClient.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("clients")
+          .insert(payload);
+        if (error) throw error;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["clients"] });
+      setModalOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Client detail view
   if (selectedClient) {
     return (
       <DashboardLayout>
@@ -34,15 +88,44 @@ const Clients = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h1 className="text-xl font-heading font-extrabold text-foreground">{selectedClient.business_name}</h1>
-                <p className="text-sm text-muted-foreground">{clientContact?.full_name || "—"} · {selectedClient.industry || "—"}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedClient.trading_name ? `t/a ${selectedClient.trading_name} · ` : ""}
+                  {clientContact?.full_name || "—"} · {selectedClient.industry || "—"}
+                </p>
               </div>
-              <StatusBadge status={selectedClient.status} />
+              <div className="flex items-center gap-2">
+                <StatusBadge status={selectedClient.status} />
+                <button
+                  onClick={(e) => handleEdit(e, selectedClient)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-input text-xs font-medium text-foreground hover:bg-muted/40 transition"
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 text-sm">
               <div><span className="text-muted-foreground">Email:</span> <span className="font-medium text-foreground">{selectedClient.email || "—"}</span></div>
               <div><span className="text-muted-foreground">Phone:</span> <span className="font-medium text-foreground">{selectedClient.phone || "—"}</span></div>
               <div><span className="text-muted-foreground">Since:</span> <span className="font-medium text-foreground">{new Date(selectedClient.created_at).toLocaleDateString("en-ZA")}</span></div>
+              <div><span className="text-muted-foreground">Registration:</span> <span className="font-medium text-foreground">{selectedClient.company_registration || "—"}</span></div>
+              <div><span className="text-muted-foreground">VAT:</span> <span className="font-medium text-foreground">{selectedClient.vat_number || "—"}</span></div>
+              <div>
+                <span className="text-muted-foreground">Website:</span>{" "}
+                {selectedClient.website_url ? (
+                  <a href={selectedClient.website_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline inline-flex items-center gap-1">
+                    {selectedClient.website_url.replace(/^https?:\/\//, "")} <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <span className="font-medium text-foreground">—</span>
+                )}
+              </div>
             </div>
+            {selectedClient.notes && (
+              <div className="mt-4 text-sm">
+                <span className="text-muted-foreground">Notes:</span>
+                <p className="mt-1 text-foreground bg-muted/30 rounded-xl px-3 py-2">{selectedClient.notes}</p>
+              </div>
+            )}
           </div>
 
           <div className="grid lg:grid-cols-2 gap-4">
@@ -90,16 +173,34 @@ const Clients = () => {
             </div>
           </div>
         </div>
+
+        <ClientFormModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleSubmit}
+          initialData={editingClient}
+          loading={saving}
+        />
       </DashboardLayout>
     );
   }
 
+  // Client list view
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-heading font-extrabold text-foreground">Clients</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage your client base.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-heading font-extrabold text-foreground">Clients</h1>
+            <p className="text-sm text-muted-foreground mt-1">Manage your client base.</p>
+          </div>
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-brand text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity shadow-md shadow-primary/20"
+          >
+            <Plus className="h-4 w-4" />
+            Add Client
+          </button>
         </div>
 
         <div className="relative max-w-sm">
@@ -120,8 +221,10 @@ const Clients = () => {
                 <tr className="border-b border-border bg-muted/40">
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Client</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden sm:table-cell">Industry</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Contact</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Website</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Created</th>
+                  <th className="px-4 py-3 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -132,8 +235,22 @@ const Clients = () => {
                       {client.trading_name && <p className="text-xs text-muted-foreground mt-0.5">{client.trading_name}</p>}
                     </td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{client.industry || "—"}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{client.email || "—"}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">
+                      {client.website_url ? (
+                        <span className="text-primary">{client.website_url.replace(/^https?:\/\//, "").slice(0, 30)}</span>
+                      ) : "—"}
+                    </td>
                     <td className="px-4 py-3.5"><StatusBadge status={client.status} /></td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(client.created_at).toLocaleDateString("en-ZA")}</td>
+                    <td className="px-4 py-3.5">
+                      <button
+                        onClick={(e) => handleEdit(e, client)}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        title="Edit client"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -145,6 +262,14 @@ const Clients = () => {
           )}
         </div>
       </div>
+
+      <ClientFormModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSubmit={handleSubmit}
+        initialData={editingClient}
+        loading={saving}
+      />
     </DashboardLayout>
   );
 };
