@@ -2,7 +2,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
-import { mockProjects, mockSupportTickets, mockReports } from "@/data/mockData";
+import { useClientProjects, useClientReports, useClientTasks } from "@/hooks/useSupabaseData";
 import { FolderOpen, MessageSquare, FileText, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -10,11 +10,13 @@ const ClientDashboard = () => {
   const { user } = useAuth();
   const clientId = user?.clientId;
 
-  const projects = mockProjects.filter((p) => p.clientId === clientId);
-  const tickets = mockSupportTickets.filter((t) => t.clientId === clientId);
-  const reports = mockReports.filter((r) => r.clientId === clientId);
-  const activeProjects = projects.filter((p) => p.status === "active").length;
-  const openTickets = tickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
+  const { data: projects = [] } = useClientProjects(clientId);
+  const { data: reports = [] } = useClientReports(clientId);
+  const { data: tasks = [] } = useClientTasks(clientId);
+  const supportTickets = tasks.filter((t) => t.task_type === "support");
+
+  const activeProjects = projects.filter((p) => p.stage !== "completed" && p.stage !== "cancelled").length;
+  const openTickets = supportTickets.filter((t) => t.status === "todo" || t.status === "in_progress").length;
 
   return (
     <DashboardLayout>
@@ -34,7 +36,7 @@ const ClientDashboard = () => {
           <StatCard title="Active Projects" value={activeProjects} icon={FolderOpen} variant="primary" />
           <StatCard title="Open Support" value={openTickets} icon={MessageSquare} variant="warning" />
           <StatCard title="Reports" value={reports.length} icon={FileText} variant="info" />
-          <StatCard title="Action Required" value={tickets.filter((t) => t.priority === "urgent" || t.priority === "high").length} icon={AlertCircle} variant="warning" />
+          <StatCard title="Action Required" value={supportTickets.filter((t) => t.priority === "urgent" || t.priority === "high").length} icon={AlertCircle} variant="warning" />
         </div>
 
         {/* Projects */}
@@ -47,10 +49,10 @@ const ClientDashboard = () => {
             {projects.map((p) => (
               <div key={p.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                 <div>
-                  <p className="text-sm font-medium text-foreground">{p.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{p.description.slice(0, 60)}...</p>
+                  <p className="text-sm font-medium text-foreground">{p.project_name || "Untitled"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{(p.description || "").slice(0, 60)}{(p.description || "").length > 60 ? "..." : ""}</p>
                 </div>
-                <StatusBadge status={p.buildStage} />
+                <StatusBadge status={p.stage} />
               </div>
             ))}
             {projects.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground text-center">No projects yet.</p>}
@@ -65,13 +67,13 @@ const ClientDashboard = () => {
               <Link to="/client/support" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">View all →</Link>
             </div>
             <div className="divide-y divide-border">
-              {tickets.slice(0, 3).map((t) => (
+              {supportTickets.slice(0, 3).map((t) => (
                 <div key={t.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                  <p className="text-sm text-foreground">{t.subject}</p>
+                  <p className="text-sm text-foreground">{t.title}</p>
                   <StatusBadge status={t.status} />
                 </div>
               ))}
-              {tickets.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground text-center">No tickets</p>}
+              {supportTickets.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground text-center">No tickets</p>}
             </div>
           </div>
           <div className="bg-card rounded-2xl border border-border shadow-sm">
@@ -82,7 +84,7 @@ const ClientDashboard = () => {
             <div className="divide-y divide-border">
               {reports.slice(0, 3).map((r) => (
                 <div key={r.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                  <p className="text-sm text-foreground">{r.title}</p>
+                  <p className="text-sm text-foreground">{r.title || "Untitled"}</p>
                   <StatusBadge status={r.status} />
                 </div>
               ))}

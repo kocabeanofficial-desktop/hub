@@ -1,11 +1,11 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
-import { mockReports } from "@/data/mockData";
+import { useClientReports } from "@/hooks/useSupabaseData";
 
 const ClientReports = () => {
   const { user } = useAuth();
-  const reports = mockReports.filter((r) => r.clientId === user?.clientId);
+  const { data: reports = [], isLoading } = useClientReports(user?.clientId);
 
   return (
     <DashboardLayout>
@@ -25,16 +25,17 @@ const ClientReports = () => {
               <tbody className="divide-y divide-border">
                 {reports.map((r) => (
                   <tr key={r.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3.5 font-medium text-foreground">{r.title}</td>
-                    <td className="px-4 py-3.5 hidden sm:table-cell"><StatusBadge status={r.type} /></td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{r.date}</td>
+                    <td className="px-4 py-3.5 font-medium text-foreground">{r.title || "Untitled"}</td>
+                    <td className="px-4 py-3.5 hidden sm:table-cell"><StatusBadge status={r.report_type} /></td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{new Date(r.created_at).toLocaleDateString("en-ZA")}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={r.status} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {reports.length === 0 && <p className="px-4 py-12 text-sm text-muted-foreground text-center">No reports yet.</p>}
+          {isLoading && <div className="px-4 py-12 text-center text-sm text-muted-foreground">Loading...</div>}
+          {!isLoading && reports.length === 0 && <p className="px-4 py-12 text-sm text-muted-foreground text-center">No reports yet.</p>}
         </div>
       </div>
     </DashboardLayout>
