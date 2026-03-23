@@ -20,11 +20,11 @@ const ClientDashboard = () => {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Welcome */}
-        <div className="bg-primary/5 border border-primary/20 rounded-lg p-5">
-          <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground">
-            Welcome, {user?.name?.split(" ")[0]}
+        <div className="rounded-2xl p-5 sm:p-6 gradient-brand text-primary-foreground shadow-md shadow-primary/15">
+          <h1 className="text-xl sm:text-2xl font-heading font-extrabold">
+            Welcome, {user?.name?.split(" ")[0]} 👋
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm mt-1 text-primary-foreground/80">
             Here's what's happening with your projects.
           </p>
         </div>
@@ -38,14 +38,14 @@ const ClientDashboard = () => {
         </div>
 
         {/* Projects */}
-        <div className="bg-card rounded-lg border border-border">
-          <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-border">
-            <h2 className="text-sm font-heading font-semibold text-foreground">Your Projects</h2>
-            <Link to="/client/projects" className="text-xs text-primary hover:underline">View all</Link>
+        <div className="bg-card rounded-2xl border border-border shadow-sm">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-border">
+            <h2 className="text-sm font-heading font-bold text-foreground">Your Projects</h2>
+            <Link to="/client/projects" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">View all →</Link>
           </div>
           <div className="divide-y divide-border">
             {projects.map((p) => (
-              <div key={p.id} className="px-4 sm:px-5 py-3 flex items-center justify-between">
+              <div key={p.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                 <div>
                   <p className="text-sm font-medium text-foreground">{p.name}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{p.description.slice(0, 60)}...</p>
@@ -59,14 +59,14 @@ const ClientDashboard = () => {
 
         {/* Support + Reports */}
         <div className="grid lg:grid-cols-2 gap-4">
-          <div className="bg-card rounded-lg border border-border">
-            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-border">
-              <h2 className="text-sm font-heading font-semibold text-foreground">Support</h2>
-              <Link to="/client/support" className="text-xs text-primary hover:underline">View all</Link>
+          <div className="bg-card rounded-2xl border border-border shadow-sm">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-border">
+              <h2 className="text-sm font-heading font-bold text-foreground">Support</h2>
+              <Link to="/client/support" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">View all →</Link>
             </div>
             <div className="divide-y divide-border">
               {tickets.slice(0, 3).map((t) => (
-                <div key={t.id} className="px-4 sm:px-5 py-3 flex items-center justify-between">
+                <div key={t.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                   <p className="text-sm text-foreground">{t.subject}</p>
                   <StatusBadge status={t.status} />
                 </div>
@@ -74,14 +74,14 @@ const ClientDashboard = () => {
               {tickets.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground text-center">No tickets</p>}
             </div>
           </div>
-          <div className="bg-card rounded-lg border border-border">
-            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-border">
-              <h2 className="text-sm font-heading font-semibold text-foreground">Reports</h2>
-              <Link to="/client/reports" className="text-xs text-primary hover:underline">View all</Link>
+          <div className="bg-card rounded-2xl border border-border shadow-sm">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-border">
+              <h2 className="text-sm font-heading font-bold text-foreground">Reports</h2>
+              <Link to="/client/reports" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">View all →</Link>
             </div>
             <div className="divide-y divide-border">
               {reports.slice(0, 3).map((r) => (
-                <div key={r.id} className="px-4 sm:px-5 py-3 flex items-center justify-between">
+                <div key={r.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                   <p className="text-sm text-foreground">{r.title}</p>
                   <StatusBadge status={r.status} />
                 </div>
