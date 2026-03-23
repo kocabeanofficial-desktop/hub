@@ -34,8 +34,8 @@ const Login = () => {
       <div className="w-full max-w-sm space-y-8 animate-fade-in-up relative z-10">
         {/* Brand */}
         <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-brand shadow-lg shadow-primary/20">
-            <Globe className="h-8 w-8 text-primary-foreground" />
+          <div className="inline-flex items-center justify-center w-20 h-20">
+            <img src={kocaBeanLogo} alt="Koca Bean" className="w-20 h-20 object-contain" />
           </div>
           <div>
             <h1 className="text-2xl font-heading font-extrabold gradient-brand-text">Koca Bean</h1>
