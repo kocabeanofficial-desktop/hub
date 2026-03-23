@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Globe } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import kocaBeanLogo from "@/assets/koca-bean-logo.png";
 
 const Login = () => {
   const [email, setEmail] = useState("");

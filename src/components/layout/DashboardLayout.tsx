@@ -4,8 +4,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, FolderOpen, MessageSquare, FileText,
-  Activity, Search, LogOut, Menu, X, Globe, Inbox,
+  Activity, Search, LogOut, Menu, X, Inbox,
 } from "lucide-react";
+import kocaBeanLogo from "@/assets/koca-bean-logo.png";
 
 const adminNav = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
