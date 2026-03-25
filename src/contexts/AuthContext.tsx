@@ -25,11 +25,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ADMIN_LOOKUP_TIMEOUT_MS = 8000;
 
-const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> =>
+const withTimeout = <T,>(operation: () => Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> =>
   new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
 
-    promise
+    operation()
       .then(resolve)
       .catch(reject)
       .finally(() => clearTimeout(timeoutId));
@@ -37,11 +37,12 @@ const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage:
 
 async function resolveAppUser(supaUser: User): Promise<AppUser> {
   const { data: adminRow, error: adminLookupError } = await withTimeout(
-    supabase
-      .from("admin_users")
-      .select("role, is_active")
-      .eq("user_id", supaUser.id)
-      .maybeSingle(),
+    () =>
+      supabase
+        .from("admin_users")
+        .select("role, is_active")
+        .eq("user_id", supaUser.id)
+        .maybeSingle(),
     ADMIN_LOOKUP_TIMEOUT_MS,
     "Admin access check timed out. Please refresh and try again."
   );
