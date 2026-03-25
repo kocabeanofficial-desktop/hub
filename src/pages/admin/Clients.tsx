@@ -295,7 +295,7 @@ const Clients = () => {
           )}
           {!isLoading && !isError && filtered.length === 0 && (
             <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-              {clients.length === 0 ? "No clients yet. Click "Add Client" to get started." : "No clients match your search."}
+              {clients.length === 0 ? 'No clients yet. Click "Add Client" to get started.' : "No clients match your search."}
             </div>
           )}
         </div>
