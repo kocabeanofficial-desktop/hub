@@ -82,8 +82,8 @@ const AdminDashboard = () => {
               {enquiries.slice(0, 3).map((enq) => (
                 <div key={enq.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{enq.full_name || enq.business_name || "Unknown"}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{enq.business_type || "Enquiry"}</p>
+                    <p className="text-sm font-medium text-foreground">{enq.submitter_name || enq.business_name || "Unknown"}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{enq.requested_services || "Enquiry"}</p>
                   </div>
                   <StatusBadge status={enq.status} />
                 </div>
