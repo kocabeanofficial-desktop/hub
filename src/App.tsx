@@ -61,7 +61,6 @@ const LoginRoute = () => {
   if (authError) return <FullPageAuthError message={authError} />;
   if (isAuthenticated) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
   return <Login />;
-};
 
 const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
@@ -71,7 +70,8 @@ const App: React.FC = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<LoginRoute />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<LoginRoute />} />
             {/* Admin routes */}
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/enquiries" element={<ProtectedRoute role="admin"><Enquiries /></ProtectedRoute>} />
