@@ -61,6 +61,7 @@ const LoginRoute = () => {
   if (authError) return <FullPageAuthError message={authError} />;
   if (isAuthenticated) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
   return <Login />;
+};
 
 const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
