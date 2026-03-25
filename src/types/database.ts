@@ -4,7 +4,6 @@ export interface DbClient {
   id: string;
   business_name: string;
   trading_name: string | null;
-  company_registration: string | null;
   email: string | null;
   phone: string | null;
   industry: string | null;
