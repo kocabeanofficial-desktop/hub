@@ -9,6 +9,7 @@ export interface AppUser {
   email: string;
   name: string;
   role: UserRole;
+  clientId?: string;
 }
 
 interface AuthContextType {
