@@ -34,7 +34,7 @@ async function resolveAppUser(supaUser: User): Promise<AppUser> {
     return {
       id: supaUser.id,
       email: supaUser.email ?? "",
-      name: adminRow.display_name || supaUser.email?.split("@")[0] || "Admin",
+      name: supaUser.email?.split("@")[0] || "Admin",
       role: "admin",
     };
   }
