@@ -50,7 +50,7 @@ const ProtectedRoute = ({ children, role }: { children: React.ReactNode; role?: 
   const { isAuthenticated, isLoading, user, authError } = useAuth();
   if (isLoading) return <FullPageLoader />;
   if (authError) return <FullPageAuthError message={authError} />;
-  if (!isAuthenticated) return <Navigate to="/" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (role && user?.role !== role) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
   return <>{children}</>;
 };
@@ -71,7 +71,8 @@ const App: React.FC = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<LoginRoute />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<LoginRoute />} />
             {/* Admin routes */}
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/enquiries" element={<ProtectedRoute role="admin"><Enquiries /></ProtectedRoute>} />
