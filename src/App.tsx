@@ -50,7 +50,7 @@ const ProtectedRoute = ({ children, role }: { children: React.ReactNode; role?: 
   const { isAuthenticated, isLoading, user, authError } = useAuth();
   if (isLoading) return <FullPageLoader />;
   if (authError) return <FullPageAuthError message={authError} />;
-  if (!isAuthenticated) return <Navigate to="/" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (role && user?.role !== role) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
   return <>{children}</>;
 };
