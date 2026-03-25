@@ -1,25 +1,32 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import kocaBeanLogo from "@/assets/koca-bean-logo.png";
 
 const Login = () => {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const success = login(email);
-    if (success) {
-      const user = email.toLowerCase().includes("admin") ? "/admin" : "/client";
-      navigate(user);
+    setLoading(true);
+
+    const result = await login(email, password);
+
+    if (result.success) {
+      // Navigation will be handled by LoginRoute redirect in App.tsx
+      // but we can also navigate explicitly
+      navigate("/admin");
     } else {
-      setError("Access denied. This portal is invite-only.");
+      setError(result.error || "Invalid email or password.");
     }
+    setLoading(false);
   };
 
   return (
@@ -61,6 +68,21 @@ const Login = () => {
               />
             </div>
 
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1.5">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full px-4 py-3 rounded-xl border border-input bg-background text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition"
+              />
+            </div>
+
             {error && (
               <p className="text-sm text-destructive bg-destructive/5 rounded-xl px-3 py-2 border border-destructive/20">
                 {error}
@@ -69,36 +91,26 @@ const Login = () => {
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 gradient-brand text-primary-foreground rounded-xl py-3 text-sm font-semibold hover:opacity-90 transition-opacity shadow-md shadow-primary/20"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 gradient-brand text-primary-foreground rounded-xl py-3 text-sm font-semibold hover:opacity-90 transition-opacity shadow-md shadow-primary/20 disabled:opacity-60"
             >
-              Sign in
-              <ArrowRight className="h-4 w-4" />
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Signing in…
+                </>
+              ) : (
+                <>
+                  Sign in
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
           </div>
 
           <p className="text-center text-xs text-muted-foreground">
             This is a private portal. Access is by invitation only.
           </p>
-
-          {/* Demo credentials */}
-          <div className="bg-card/60 backdrop-blur-sm rounded-xl border border-border p-4 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Demo accounts:</p>
-            <div className="space-y-1">
-              {[
-                { label: "Admin", email: "admin@kocabean.co.za" },
-                { label: "Client", email: "john@buildpro.co.za" },
-              ].map((demo) => (
-                <button
-                  key={demo.email}
-                  type="button"
-                  onClick={() => setEmail(demo.email)}
-                  className="block w-full text-left text-xs text-muted-foreground hover:text-primary transition-colors py-0.5"
-                >
-                  <span className="font-medium">{demo.label}:</span> {demo.email}
-                </button>
-              ))}
-            </div>
-          </div>
         </form>
       </div>
     </div>
