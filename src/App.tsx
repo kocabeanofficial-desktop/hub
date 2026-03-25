@@ -30,17 +30,35 @@ const FullPageLoader = () => (
   </div>
 );
 
+const FullPageAuthError = ({ message }: { message: string }) => (
+  <div className="min-h-screen flex items-center justify-center bg-background px-6">
+    <div className="max-w-md text-center space-y-3">
+      <p className="text-sm font-semibold text-foreground">Authentication error</p>
+      <p className="text-sm text-muted-foreground">{message}</p>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="text-sm font-medium text-primary hover:underline"
+      >
+        Retry
+      </button>
+    </div>
+  </div>
+);
+
 const ProtectedRoute = ({ children, role }: { children: React.ReactNode; role?: string }) => {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, authError } = useAuth();
   if (isLoading) return <FullPageLoader />;
+  if (authError) return <FullPageAuthError message={authError} />;
   if (!isAuthenticated) return <Navigate to="/" replace />;
   if (role && user?.role !== role) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
   return <>{children}</>;
 };
 
 const LoginRoute = () => {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, authError } = useAuth();
   if (isLoading) return <FullPageLoader />;
+  if (authError) return <FullPageAuthError message={authError} />;
   if (isAuthenticated) return <Navigate to={user?.role === "admin" ? "/admin" : "/client"} replace />;
   return <Login />;
 };
