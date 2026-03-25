@@ -15,12 +15,12 @@ const AdminDashboard = () => {
   const { data: reports = [] } = useReports();
   const { data: activityEvents = [] } = useAutomationEvents();
 
-  const openEnquiries = enquiries.filter((e) => e.status === "new" || e.status === "contacted").length;
   const activeClients = clients.filter((c) => c.status === "active").length;
-  const activeProjects = projects.filter((p) => p.stage !== "completed" && p.stage !== "cancelled").length;
-  const websitesInProgress = projects.filter((p) => p.project_type === "website" && p.stage !== "live" && p.stage !== "completed").length;
-  const openSupport = tasks.filter((t) => t.task_type === "support" && (t.status === "todo" || t.status === "in_progress")).length;
-  const pendingReports = reports.filter((r) => r.status === "draft").length;
+  const activeProjects = projects.length;
+  const websitesInProgress = projects.filter((p) => p.stage !== "completed" && p.stage !== "live").length;
+  const openEnquiries = enquiries.filter((e) => e.status !== "converted").length;
+  const openSupport = tasks.filter((t) => t.status !== "closed").length;
+  const pendingReports = reports.filter((r) => r.status !== "completed").length;
 
   return (
     <DashboardLayout>
