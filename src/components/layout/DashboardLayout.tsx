@@ -34,8 +34,8 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
 
   const nav = user?.role === "admin" ? adminNav : clientNav;
 
-  const handleLogout = async () => {
-    await logout();
+  const handleLogout = () => {
+    logout();
     navigate("/");
   };
 
