@@ -2,23 +2,128 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useClients, useProjects, useTasks, useReports, useContacts } from "@/hooks/useSupabaseData";
 import { useState } from "react";
-import { Search, ArrowRight } from "lucide-react";
+import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import type { DbClient } from "@/types/database";
+
+type ClientFormData = {
+  business_name: string;
+  trading_name: string;
+  company_registration: string;
+  vat_number: string;
+  industry: string;
+  website_url: string;
+  notes: string;
+  status: string;
+};
+
+const emptyForm: ClientFormData = {
+  business_name: "",
+  trading_name: "",
+  company_registration: "",
+  vat_number: "",
+  industry: "",
+  website_url: "",
+  notes: "",
+  status: "active",
+};
+
+const STATUS_OPTIONS = ["active", "inactive", "lead", "churned"];
 
 const Clients = () => {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const { data: clients = [], isLoading } = useClients();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<DbClient | null>(null);
+  const [form, setForm] = useState<ClientFormData>(emptyForm);
+  const [saving, setSaving] = useState(false);
+
+  const { data: clients = [], isLoading, isError, error } = useClients();
   const { data: projects = [] } = useProjects();
   const { data: tasks = [] } = useTasks();
   const { data: reports = [] } = useReports();
   const { data: contacts = [] } = useContacts();
+  const queryClient = useQueryClient();
 
   const filtered = clients.filter((c) =>
     c.business_name.toLowerCase().includes(search.toLowerCase()) ||
     (c.trading_name || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  const openCreate = () => {
+    setEditingClient(null);
+    setForm(emptyForm);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (client: DbClient) => {
+    setEditingClient(client);
+    setForm({
+      business_name: client.business_name || "",
+      trading_name: client.trading_name || "",
+      company_registration: client.company_registration || "",
+      vat_number: client.vat_number || "",
+      industry: client.industry || "",
+      website_url: client.website_url || "",
+      notes: client.notes || "",
+      status: client.status || "active",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.business_name.trim()) {
+      toast({ title: "Validation error", description: "Business name is required.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+
+    const payload = {
+      business_name: form.business_name.trim(),
+      trading_name: form.trading_name.trim() || null,
+      company_registration: form.company_registration.trim() || null,
+      vat_number: form.vat_number.trim() || null,
+      industry: form.industry.trim() || null,
+      website_url: form.website_url.trim() || null,
+      notes: form.notes.trim() || null,
+      status: form.status,
+    };
+
+    let result;
+    if (editingClient) {
+      result = await supabase.from("clients").update(payload).eq("id", editingClient.id);
+    } else {
+      result = await supabase.from("clients").insert(payload);
+    }
+
+    setSaving(false);
+
+    if (result.error) {
+      toast({ title: "Save failed", description: result.error.message, variant: "destructive" });
+      return;
+    }
+
+    toast({ title: editingClient ? "Client updated" : "Client created" });
+    queryClient.invalidateQueries({ queryKey: ["clients"] });
+    setDialogOpen(false);
+  };
+
+  const updateField = (field: keyof ClientFormData, value: string) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  // ── Detail view ──
   const selectedClient = selected ? clients.find((c) => c.id === selected) : null;
   const clientProjects = selected ? projects.filter((p) => p.client_id === selected) : [];
   const clientTickets = selected ? tasks.filter((t) => t.client_id === selected && t.task_type === "support") : [];
@@ -29,7 +134,12 @@ const Clients = () => {
     return (
       <DashboardLayout>
         <div className="space-y-4">
-          <button onClick={() => setSelected(null)} className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">← Back to Clients</button>
+          <div className="flex items-center justify-between">
+            <button onClick={() => setSelected(null)} className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">← Back to Clients</button>
+            <Button variant="outline" size="sm" onClick={() => openEdit(selectedClient)}>
+              <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+            </Button>
+          </div>
           <div className="bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -90,16 +200,32 @@ const Clients = () => {
             </div>
           </div>
         </div>
+
+        <ClientFormDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          form={form}
+          updateField={updateField}
+          onSave={handleSave}
+          saving={saving}
+          isEdit={!!editingClient}
+        />
       </DashboardLayout>
     );
   }
 
+  // ── List view ──
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-heading font-extrabold text-foreground">Clients</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage your client base.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-heading font-extrabold text-foreground">Clients</h1>
+            <p className="text-sm text-muted-foreground mt-1">Manage your client base.</p>
+          </div>
+          <Button onClick={openCreate} size="sm" className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add Client
+          </Button>
         </div>
 
         <div className="relative max-w-sm">
@@ -113,6 +239,13 @@ const Clients = () => {
           />
         </div>
 
+        {isError && (
+          <div className="bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3 flex items-start gap-3">
+            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            <p className="text-sm text-destructive">{(error as Error)?.message || "Failed to load clients."}</p>
+          </div>
+        )}
+
         <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -120,33 +253,148 @@ const Clients = () => {
                 <tr className="border-b border-border bg-muted/40">
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Client</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden sm:table-cell">Industry</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Contact</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Website</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Created</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((client) => (
-                  <tr key={client.id} onClick={() => setSelected(client.id)} className="hover:bg-muted/20 transition-colors cursor-pointer">
-                    <td className="px-4 py-3.5">
+                  <tr key={client.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3.5 cursor-pointer" onClick={() => setSelected(client.id)}>
                       <p className="font-medium text-foreground">{client.business_name}</p>
                       {client.trading_name && <p className="text-xs text-muted-foreground mt-0.5">{client.trading_name}</p>}
                     </td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{client.industry || "—"}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{client.email || "—"}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">
+                      {client.website_url ? (
+                        <a href={client.website_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block max-w-[180px]">{client.website_url.replace(/^https?:\/\//, "")}</a>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(client.created_at).toLocaleDateString("en-ZA")}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={client.status} /></td>
+                    <td className="px-4 py-3.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openEdit(client); }}
+                        className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {isLoading && <div className="px-4 py-12 text-center text-sm text-muted-foreground">Loading...</div>}
-          {!isLoading && filtered.length === 0 && (
-            <div className="px-4 py-12 text-center text-sm text-muted-foreground">No clients found.</div>
+          {isLoading && (
+            <div className="px-4 py-12 text-center">
+              <Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" />
+              <p className="text-sm text-muted-foreground mt-2">Loading clients…</p>
+            </div>
+          )}
+          {!isLoading && !isError && filtered.length === 0 && (
+            <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+              {clients.length === 0 ? "No clients yet. Click "Add Client" to get started." : "No clients match your search."}
+            </div>
           )}
         </div>
       </div>
+
+      <ClientFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        form={form}
+        updateField={updateField}
+        onSave={handleSave}
+        saving={saving}
+        isEdit={!!editingClient}
+      />
     </DashboardLayout>
   );
 };
+
+// ── Form Dialog ──
+interface ClientFormDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  form: ClientFormData;
+  updateField: (field: keyof ClientFormData, value: string) => void;
+  onSave: () => void;
+  saving: boolean;
+  isEdit: boolean;
+}
+
+const ClientFormDialog = ({ open, onOpenChange, form, updateField, onSave, saving, isEdit }: ClientFormDialogProps) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="sm:max-w-lg">
+      <DialogHeader>
+        <DialogTitle className="font-heading font-bold">{isEdit ? "Edit Client" : "Add Client"}</DialogTitle>
+        <DialogDescription>{isEdit ? "Update the client details below." : "Fill in the details to create a new client."}</DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4 py-2">
+        <div className="grid gap-1.5">
+          <Label htmlFor="business_name">Business Name *</Label>
+          <Input id="business_name" value={form.business_name} onChange={(e) => updateField("business_name", e.target.value)} placeholder="e.g. Acme Holdings" />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="trading_name">Trading Name</Label>
+            <Input id="trading_name" value={form.trading_name} onChange={(e) => updateField("trading_name", e.target.value)} placeholder="e.g. Acme" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="industry">Industry</Label>
+            <Input id="industry" value={form.industry} onChange={(e) => updateField("industry", e.target.value)} placeholder="e.g. Technology" />
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="company_registration">Company Registration</Label>
+            <Input id="company_registration" value={form.company_registration} onChange={(e) => updateField("company_registration", e.target.value)} placeholder="e.g. 2024/123456/07" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="vat_number">VAT Number</Label>
+            <Input id="vat_number" value={form.vat_number} onChange={(e) => updateField("vat_number", e.target.value)} placeholder="e.g. 4123456789" />
+          </div>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="website_url">Website URL</Label>
+          <Input id="website_url" value={form.website_url} onChange={(e) => updateField("website_url", e.target.value)} placeholder="https://example.co.za" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="notes">Notes</Label>
+          <textarea
+            id="notes"
+            value={form.notes}
+            onChange={(e) => updateField("notes", e.target.value)}
+            rows={3}
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition resize-none"
+            placeholder="Optional notes…"
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="status">Status</Label>
+          <Select value={form.status} onValueChange={(v) => updateField("status", v)}>
+            <SelectTrigger className="rounded-xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((s) => (
+                <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+        <Button onClick={onSave} disabled={saving}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+          {isEdit ? "Save Changes" : "Create Client"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+);
 
 export default Clients;
