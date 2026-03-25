@@ -26,7 +26,7 @@ async function resolveAppUser(supaUser: User): Promise<AppUser> {
   // Check admin_users table
   const { data: adminRow } = await supabase
     .from("admin_users")
-    .select("role, is_active, display_name")
+    .select("role, is_active")
     .eq("user_id", supaUser.id)
     .maybeSingle();
 
@@ -34,7 +34,7 @@ async function resolveAppUser(supaUser: User): Promise<AppUser> {
     return {
       id: supaUser.id,
       email: supaUser.email ?? "",
-      name: adminRow.display_name || supaUser.email?.split("@")[0] || "Admin",
+      name: supaUser.email?.split("@")[0] || "Admin",
       role: "admin",
     };
   }
