@@ -34,7 +34,7 @@ const LoginRoute = () => {
   return <Login />;
 };
 
-const App = () => (
+const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
