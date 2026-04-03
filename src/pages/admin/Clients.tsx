@@ -39,6 +39,7 @@ const Clients = () => {
   const [editingClient, setEditingClient] = useState<DbClient | null>(null);
   const [form, setForm] = useState<ClientFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState<string | null>(null);
 
   const { data: clients = [], isLoading, isError, error } = useClients();
   const { data: projects = [] } = useProjects();
@@ -46,6 +47,7 @@ const Clients = () => {
   const { data: reports = [] } = useReports();
   const { data: contacts = [] } = useContacts();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const filtered = clients.filter((c) =>
     c.business_name.toLowerCase().includes(search.toLowerCase()) ||
