@@ -1,10 +1,9 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { useIntakeSubmissions } from "@/hooks/useSupabaseData";
 import { useState } from "react";
 import { Search, Eye, UserPlus, CheckCircle, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -15,13 +14,28 @@ import { Badge } from "@/components/ui/badge";
 import { IceboxTab, useIceboxCount } from "@/components/enquiries/IceboxTab";
 import type { DbIntakeSubmission } from "@/types/database";
 
+function useWebsiteEnquiries() {
+  return useQuery({
+    queryKey: ["intake_submissions", "website"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("intake_submissions")
+        .select("*")
+        .in("status", ["new", "processed", "contacted", "qualified", "converted", "closed"])
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DbIntakeSubmission[];
+    },
+  });
+}
+
 const Enquiries = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState<DbIntakeSubmission | null>(null);
   const [converting, setConverting] = useState(false);
   const [reviewing, setReviewing] = useState(false);
-  const { data: enquiries = [], isLoading, isError } = useIntakeSubmissions();
+  const { data: enquiries = [], isLoading, isError } = useWebsiteEnquiries();
   const { data: iceboxCount = 0 } = useIceboxCount();
   const queryClient = useQueryClient();
 
@@ -104,9 +118,8 @@ const Enquiries = () => {
           <p className="text-sm text-muted-foreground mt-1">Manage incoming enquiries and leads.</p>
         </div>
 
-        <Tabs defaultValue="website" className="space-y-4">
+        <Tabs defaultValue="icebox" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="website">Website Enquiries</TabsTrigger>
             <TabsTrigger value="icebox" className="gap-1.5">
               Icebox
               {iceboxCount > 0 && (
@@ -115,7 +128,13 @@ const Enquiries = () => {
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="website">Website Enquiries</TabsTrigger>
           </TabsList>
+
+          {/* Icebox Tab (default) */}
+          <TabsContent value="icebox">
+            <IceboxTab />
+          </TabsContent>
 
           {/* Website Enquiries Tab */}
           <TabsContent value="website" className="space-y-4">
@@ -195,11 +214,6 @@ const Enquiries = () => {
                 )}
               </div>
             )}
-          </TabsContent>
-
-          {/* Icebox Tab */}
-          <TabsContent value="icebox">
-            <IceboxTab />
           </TabsContent>
         </Tabs>
       </div>
