@@ -218,6 +218,11 @@ const Clients = () => {
             <div className="lg:col-span-2">
               <ClientServicesSection clientId={selected!} />
             </div>
+
+            {/* Hosting & Infrastructure section */}
+            <div className="lg:col-span-2">
+              <ClientHostingSection clientId={selected!} />
+            </div>
           </div>
         </div>
 

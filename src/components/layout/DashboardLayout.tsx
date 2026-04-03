@@ -17,6 +17,7 @@ const adminNav = [
   { label: "Support", path: "/admin/support", icon: MessageSquare },
   { label: "SEO Tracking", path: "/admin/seo", icon: Search },
   { label: "Reports", path: "/admin/reports", icon: FileText },
+  { label: "Hosting", path: "/admin/hosting", icon: Server },
   { label: "Activity Log", path: "/admin/activity", icon: Activity },
 ];
 
