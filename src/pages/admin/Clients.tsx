@@ -109,6 +109,33 @@ const Clients = () => {
   const updateField = (field: keyof ClientFormData, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  const handleSendInvite = async (client: DbClient) => {
+    if (!client.email) {
+      toast({ title: "No email", description: "This client has no email address.", variant: "destructive" });
+      return;
+    }
+    setSendingInvite(client.id);
+    try {
+      const { data, error: fnError } = await supabaseCloud.functions.invoke("send-client-invite", {
+        body: {
+          client_id: client.id,
+          client_email: client.email,
+          client_name: client.business_name,
+          invited_by_user_id: user?.id || null,
+        },
+      });
+      if (fnError || (data && data.error)) {
+        toast({ title: "Invite failed", description: data?.error || fnError?.message || "Unknown error", variant: "destructive" });
+      } else {
+        toast({ title: "Invite sent", description: `Invite sent to ${client.email}` });
+      }
+    } catch {
+      toast({ title: "Invite failed", description: "Something went wrong.", variant: "destructive" });
+    } finally {
+      setSendingInvite(null);
+    }
+  };
+
   // ── Detail view ──
   const selectedClient = selected ? clients.find((c) => c.id === selected) : null;
   const clientProjects = selected ? projects.filter((p) => p.client_id === selected) : [];
