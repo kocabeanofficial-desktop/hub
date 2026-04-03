@@ -83,6 +83,7 @@ const App: React.FC = () => (
             <Route path="/admin/projects" element={<ProtectedRoute role="admin"><Projects /></ProtectedRoute>} />
             <Route path="/admin/projects/:projectId" element={<ProtectedRoute role="admin"><Projects /></ProtectedRoute>} />
             <Route path="/admin/support" element={<ProtectedRoute role="admin"><Support /></ProtectedRoute>} />
+            <Route path="/admin/tasks" element={<ProtectedRoute role="admin"><TaskManager /></ProtectedRoute>} />
             <Route path="/admin/seo" element={<ProtectedRoute role="admin"><SEOTracking /></ProtectedRoute>} />
             <Route path="/admin/reports" element={<ProtectedRoute role="admin"><Reports /></ProtectedRoute>} />
             <Route path="/admin/activity" element={<ProtectedRoute role="admin"><ActivityLog /></ProtectedRoute>} />

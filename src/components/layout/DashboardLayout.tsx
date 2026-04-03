@@ -13,6 +13,7 @@ const adminNav = [
   { label: "Enquiries", path: "/admin/enquiries", icon: Inbox },
   { label: "Clients", path: "/admin/clients", icon: Users },
   { label: "Projects", path: "/admin/projects", icon: FolderOpen },
+  { label: "Tasks", path: "/admin/tasks", icon: CheckSquare },
   { label: "Support", path: "/admin/support", icon: MessageSquare },
   { label: "SEO Tracking", path: "/admin/seo", icon: Search },
   { label: "Reports", path: "/admin/reports", icon: FileText },

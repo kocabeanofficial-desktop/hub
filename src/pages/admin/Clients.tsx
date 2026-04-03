@@ -212,6 +212,11 @@ const Clients = () => {
                 {clientReports.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground text-center">No reports</p>}
               </div>
             </div>
+
+            {/* Services section */}
+            <div className="lg:col-span-2">
+              <ClientServicesSection clientId={selected!} />
+            </div>
           </div>
         </div>
 
