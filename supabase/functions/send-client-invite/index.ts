@@ -20,6 +20,42 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // ── Validate token action (public, no auth needed) ──
+    if (action === "validate") {
+      const { token } = body;
+      if (!token) {
+        return new Response(
+          JSON.stringify({ error: "token is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: invite, error: inviteErr } = await supabaseAdmin
+        .from("client_invites")
+        .select("id, email, client_id, status, expires_at")
+        .eq("token", token)
+        .single();
+
+      if (inviteErr || !invite) {
+        return new Response(
+          JSON.stringify({ valid: false }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (invite.status !== "pending" || new Date(invite.expires_at) < new Date()) {
+        return new Response(
+          JSON.stringify({ valid: false }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ valid: true, email: invite.email, client_id: invite.client_id, id: invite.id }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ── Accept invite action ──
     if (action === "accept") {
       const { token, password } = body;
@@ -30,7 +66,6 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Look up the invite
       const { data: invite, error: inviteErr } = await supabaseAdmin
         .from("client_invites")
         .select("*")
@@ -51,14 +86,12 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Find the auth user by email and update their password
       const { data: users } = await supabaseAdmin.auth.admin.listUsers();
       const authUser = users?.users?.find((u: any) => u.email === invite.email);
 
       if (authUser) {
         await supabaseAdmin.auth.admin.updateUserById(authUser.id, { password });
       } else {
-        // Create user if doesn't exist
         const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email: invite.email,
           password,
@@ -73,7 +106,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Mark invite as accepted
       await supabaseAdmin
         .from("client_invites")
         .update({ status: "accepted", accepted_at: new Date().toISOString() })
