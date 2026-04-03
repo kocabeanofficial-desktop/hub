@@ -139,3 +139,47 @@ export interface DbClientService {
   created_at: string;
   updated_at: string;
 }
+
+export interface DbHostingAccount {
+  id: string;
+  client_id: string;
+  cpanel_username: string | null;
+  package: string | null;
+  status: string;
+  disk_used: string | null;
+  disk_limit: string | null;
+  server: string | null;
+  ip_address: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbDomain {
+  id: string;
+  client_id: string;
+  domain_name: string;
+  tld: string | null;
+  status: string;
+  ssl_status: string | null;
+  registrar: string | null;
+  domain_expiry: string | null;
+  ssl_expiry: string | null;
+  hosting_account_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbMailbox {
+  id: string;
+  client_id: string;
+  email_address: string;
+  status: string;
+  quota_used: string | null;
+  quota_limit: string | null;
+  hosting_account_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
