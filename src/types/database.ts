@@ -115,3 +115,27 @@ export interface DbAutomationEvent {
   message: string | null;
   payload: Record<string, unknown>;
 }
+
+export interface DbService {
+  id: string;
+  service_code: string;
+  name: string;
+  category: string;
+  description: string | null;
+  default_billing_type: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface DbClientService {
+  id: string;
+  client_id: string;
+  service_code: string;
+  is_active: boolean;
+  billing_type: string | null;
+  source: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

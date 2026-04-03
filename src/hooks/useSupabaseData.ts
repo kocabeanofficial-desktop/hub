@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   DbClient, DbContact, DbProject, DbTask,
   DbReport, DbIntakeSubmission, DbAutomationEvent,
+  DbService, DbClientService,
 } from "@/types/database";
 
 async function fetchTable<T>(table: string, orderBy = "created_at"): Promise<T[]> {
@@ -34,6 +35,25 @@ export const useIntakeSubmissions = () =>
 
 export const useAutomationEvents = () =>
   useQuery({ queryKey: ["automation_events"], queryFn: () => fetchTable<DbAutomationEvent>("automation_events") });
+
+export const useServices = () =>
+  useQuery({ queryKey: ["services"], queryFn: () => fetchTable<DbService>("services", "name") });
+
+export const useClientServices = (clientId: string | undefined) =>
+  useQuery({
+    queryKey: ["client_services", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const { data, error } = await supabase
+        .from("client_services")
+        .select("*")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DbClientService[];
+    },
+    enabled: !!clientId,
+  });
 
 // Client-scoped queries
 export const useClientProjects = (clientId: string | undefined) =>

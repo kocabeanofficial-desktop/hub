@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { DbClient } from "@/types/database";
+import { ClientServicesSection } from "@/components/clients/ClientServicesSection";
 
 type ClientFormData = {
   business_name: string;
@@ -210,6 +211,11 @@ const Clients = () => {
                 ))}
                 {clientReports.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground text-center">No reports</p>}
               </div>
+            </div>
+
+            {/* Services section */}
+            <div className="lg:col-span-2">
+              <ClientServicesSection clientId={selected!} />
             </div>
           </div>
         </div>
