@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   DbClient, DbContact, DbProject, DbTask,
   DbReport, DbIntakeSubmission, DbAutomationEvent,
+  DbService, DbClientService,
 } from "@/types/database";
 
 async function fetchTable<T>(table: string, orderBy = "created_at"): Promise<T[]> {
