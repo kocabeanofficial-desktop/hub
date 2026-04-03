@@ -12,6 +12,7 @@ import Projects from "./pages/admin/Projects";
 import Support from "./pages/admin/Support";
 import SEOTracking from "./pages/admin/SEOTracking";
 import Reports from "./pages/admin/Reports";
+import TaskManager from "./pages/admin/TaskManager";
 import ActivityLog from "./pages/admin/ActivityLog";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientProjects from "./pages/client/ClientProjects";
