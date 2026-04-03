@@ -17,6 +17,7 @@ import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientProjects from "./pages/client/ClientProjects";
 import ClientSupport from "./pages/client/ClientSupport";
 import ClientReports from "./pages/client/ClientReports";
+import AcceptInvite from "./pages/AcceptInvite";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
