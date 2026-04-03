@@ -12,6 +12,7 @@ const SOURCE_COLORS: Record<string, string> = {
   business_email: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
   contractor_special: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
   hire_out: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  website: "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300",
 };
 
 export function useIceboxCount() {
@@ -59,6 +60,14 @@ export function IceboxTab() {
   const handleActivate = async (s: DbIntakeSubmission) => {
     setActivating(true);
     try {
+      // Set to reviewing first
+      const { error: revErr } = await supabase
+        .from("intake_submissions")
+        .update({ status: "reviewing" })
+        .eq("id", s.id);
+      if (revErr) throw revErr;
+
+      // Create client
       const { data: newClient, error: cErr } = await supabase
         .from("clients")
         .insert({
@@ -71,6 +80,7 @@ export function IceboxTab() {
         .single();
       if (cErr) throw cErr;
 
+      // Create project
       const { error: pErr } = await supabase.from("projects").insert({
         client_id: newClient.id,
         project_name: (s.business_name || s.submitter_name || "New") + " Project",
@@ -80,6 +90,7 @@ export function IceboxTab() {
       });
       if (pErr) throw pErr;
 
+      // Mark activated
       const { error: uErr } = await supabase
         .from("intake_submissions")
         .update({ status: "activated" })
@@ -112,6 +123,18 @@ export function IceboxTab() {
     } finally {
       setRejecting(false);
     }
+  };
+
+  const handleWhatsApp = (s: DbIntakeSubmission) => {
+    if (!s.whatsapp_number) return;
+    // Clean number: remove spaces, replace leading 0 with 27
+    let num = s.whatsapp_number.replace(/\s+/g, "").replace(/[^0-9+]/g, "");
+    if (num.startsWith("0")) {
+      num = "27" + num.slice(1);
+    }
+    // Remove leading + if present
+    num = num.replace(/^\+/, "");
+    window.open(`https://wa.me/${num}`, "_blank");
   };
 
   if (isError) {
@@ -163,7 +186,7 @@ export function IceboxTab() {
             )}
 
             <div className="flex items-center justify-between mt-auto">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {s.campaign && (
                   <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
                     {s.campaign}
@@ -186,6 +209,7 @@ export function IceboxTab() {
         onClose={() => setSelected(null)}
         onActivate={handleActivate}
         onReject={handleReject}
+        onWhatsApp={handleWhatsApp}
         activating={activating}
         rejecting={rejecting}
       />
