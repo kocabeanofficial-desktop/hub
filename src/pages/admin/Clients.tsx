@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { DbClient } from "@/types/database";
 import { ClientServicesSection } from "@/components/clients/ClientServicesSection";
+import { ClientHostingSection } from "@/components/clients/ClientHostingSection";
 
 type ClientFormData = {
   business_name: string;
@@ -216,6 +217,11 @@ const Clients = () => {
             {/* Services section */}
             <div className="lg:col-span-2">
               <ClientServicesSection clientId={selected!} />
+            </div>
+
+            {/* Hosting & Infrastructure section */}
+            <div className="lg:col-span-2">
+              <ClientHostingSection clientId={selected!} />
             </div>
           </div>
         </div>

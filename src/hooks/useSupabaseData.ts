@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   DbClient, DbContact, DbProject, DbTask,
   DbReport, DbIntakeSubmission, DbAutomationEvent,
-  DbService, DbClientService,
+  DbService, DbClientService, DbHostingAccount, DbDomain, DbMailbox,
 } from "@/types/database";
 
 async function fetchTable<T>(table: string, orderBy = "created_at"): Promise<T[]> {
@@ -100,6 +100,51 @@ export const useClientTasks = (clientId: string | undefined) =>
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as DbTask[];
+    },
+    enabled: !!clientId,
+  });
+
+export const useHostingAccounts = () =>
+  useQuery({ queryKey: ["hosting_accounts"], queryFn: () => fetchTable<DbHostingAccount>("hosting_accounts") });
+
+export const useDomains = () =>
+  useQuery({ queryKey: ["domains"], queryFn: () => fetchTable<DbDomain>("domains") });
+
+export const useMailboxes = () =>
+  useQuery({ queryKey: ["mailboxes"], queryFn: () => fetchTable<DbMailbox>("mailboxes") });
+
+export const useClientHostingAccounts = (clientId: string | undefined) =>
+  useQuery({
+    queryKey: ["hosting_accounts", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const { data, error } = await supabase.from("hosting_accounts").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DbHostingAccount[];
+    },
+    enabled: !!clientId,
+  });
+
+export const useClientDomains = (clientId: string | undefined) =>
+  useQuery({
+    queryKey: ["domains", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const { data, error } = await supabase.from("domains").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DbDomain[];
+    },
+    enabled: !!clientId,
+  });
+
+export const useClientMailboxes = (clientId: string | undefined) =>
+  useQuery({
+    queryKey: ["mailboxes", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const { data, error } = await supabase.from("mailboxes").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DbMailbox[];
     },
     enabled: !!clientId,
   });

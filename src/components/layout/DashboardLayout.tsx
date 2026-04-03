@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, FolderOpen, MessageSquare, FileText,
-  Activity, Search, LogOut, Menu, X, Inbox, CheckSquare,
+  Activity, Search, LogOut, Menu, X, Inbox, CheckSquare, Server,
 } from "lucide-react";
 import kocaBeanLogo from "@/assets/koca-bean-logo.png";
 
@@ -17,6 +17,7 @@ const adminNav = [
   { label: "Support", path: "/admin/support", icon: MessageSquare },
   { label: "SEO Tracking", path: "/admin/seo", icon: Search },
   { label: "Reports", path: "/admin/reports", icon: FileText },
+  { label: "Hosting", path: "/admin/hosting", icon: Server },
   { label: "Activity Log", path: "/admin/activity", icon: Activity },
 ];
 

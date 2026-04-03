@@ -13,6 +13,7 @@ import Support from "./pages/admin/Support";
 import SEOTracking from "./pages/admin/SEOTracking";
 import Reports from "./pages/admin/Reports";
 import TaskManager from "./pages/admin/TaskManager";
+import Hosting from "./pages/admin/Hosting";
 import ActivityLog from "./pages/admin/ActivityLog";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientProjects from "./pages/client/ClientProjects";
@@ -86,6 +87,7 @@ const App: React.FC = () => (
             <Route path="/admin/tasks" element={<ProtectedRoute role="admin"><TaskManager /></ProtectedRoute>} />
             <Route path="/admin/seo" element={<ProtectedRoute role="admin"><SEOTracking /></ProtectedRoute>} />
             <Route path="/admin/reports" element={<ProtectedRoute role="admin"><Reports /></ProtectedRoute>} />
+            <Route path="/admin/hosting" element={<ProtectedRoute role="admin"><Hosting /></ProtectedRoute>} />
             <Route path="/admin/activity" element={<ProtectedRoute role="admin"><ActivityLog /></ProtectedRoute>} />
             {/* Client routes */}
             <Route path="/client" element={<ProtectedRoute role="client"><ClientDashboard /></ProtectedRoute>} />
