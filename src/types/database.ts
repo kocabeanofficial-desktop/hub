@@ -98,6 +98,8 @@ export interface DbIntakeSubmission {
   preferred_date: string | null;
   preferred_time: string | null;
   estimated_timeline: string | null;
+  current_website: string | null;
+  service_type: string | null;
   created_at: string;
   updated_at: string;
 }
