@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { supabaseCloud } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +27,7 @@ const AcceptInvite = () => {
     }
 
     const checkToken = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseCloud
         .from("client_invites")
         .select("id, email, client_id, status, expires_at")
         .eq("token", token)
@@ -38,12 +38,13 @@ const AcceptInvite = () => {
         return;
       }
 
-      if (data.status !== "pending" || new Date(data.expires_at) < new Date()) {
+      const row = data as any;
+      if (row.status !== "pending" || new Date(row.expires_at) < new Date()) {
         setStatus("invalid");
         return;
       }
 
-      setInvite({ id: data.id, email: data.email, client_id: data.client_id });
+      setInvite({ id: row.id, email: row.email, client_id: row.client_id });
       setStatus("valid");
     };
 
@@ -65,42 +66,27 @@ const AcceptInvite = () => {
 
     setStatus("submitting");
 
-    // Sign in with the temp password first, then update
-    // Actually, we need the user to sign in. The edge function created them with a temp password.
-    // We'll use signInWithPassword won't work since we don't know the temp password.
-    // Instead, use the admin API via an edge function, or use magic link approach.
-    // Simplest: use supabase.auth.updateUser after signing in via a password reset flow.
-    
-    // Better approach: Sign in with OTP (magic link) using the email, then update password.
-    // But for simplicity, let's call an edge function to update the password via admin API.
-
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("send-client-invite", {
+      const { data, error: fnError } = await supabaseCloud.functions.invoke("send-client-invite", {
         body: { action: "accept", token, password },
       });
 
-      // Fallback: try to update the invite status directly
-      const { error: updateError } = await supabase
-        .from("client_invites")
-        .update({ status: "accepted", accepted_at: new Date().toISOString() })
-        .eq("token", token);
-
-      if (updateError) {
-        setError("Failed to accept invite. Please try again.");
+      if (fnError || (data && data.error)) {
+        setError(data?.error || fnError?.message || "Failed to set up account.");
         setStatus("valid");
         return;
       }
 
       setStatus("accepted");
       toast.success("Account set up successfully!");
-      
-      // Sign in and redirect
+
+      // Sign in with the new password
       if (invite) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { error: signInError } = await supabaseCloud.auth.signInWithPassword({
           email: invite.email,
           password,
         });
-        
+
         if (!signInError) {
           setTimeout(() => navigate("/client"), 1500);
         }
@@ -116,9 +102,7 @@ const AcceptInvite = () => {
       <div className="w-full max-w-md">
         <div className="bg-card rounded-2xl border border-border shadow-sm p-6 sm:p-8 space-y-6">
           <div className="text-center">
-            <h1 className="text-xl font-heading font-extrabold text-foreground">
-              Koca Bean
-            </h1>
+            <h1 className="text-xl font-heading font-extrabold text-foreground">Koca Bean</h1>
             <p className="text-sm text-muted-foreground mt-1">Client Portal</p>
           </div>
 
@@ -141,7 +125,7 @@ const AcceptInvite = () => {
 
           {status === "accepted" && (
             <div className="text-center py-8 space-y-3">
-              <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto" />
+              <CheckCircle2 className="h-8 w-8 text-primary mx-auto" />
               <p className="text-sm font-medium text-foreground">Account Created!</p>
               <p className="text-sm text-muted-foreground">Redirecting to your dashboard…</p>
             </div>

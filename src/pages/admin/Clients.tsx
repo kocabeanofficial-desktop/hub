@@ -2,11 +2,12 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useClients, useProjects, useTasks, useReports, useContacts } from "@/hooks/useSupabaseData";
 import { useState } from "react";
-import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2 } from "lucide-react";
+import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2, Send } from "lucide-react";
 import { Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, supabaseCloud } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -38,6 +39,7 @@ const Clients = () => {
   const [editingClient, setEditingClient] = useState<DbClient | null>(null);
   const [form, setForm] = useState<ClientFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState<string | null>(null);
 
   const { data: clients = [], isLoading, isError, error } = useClients();
   const { data: projects = [] } = useProjects();
@@ -45,6 +47,7 @@ const Clients = () => {
   const { data: reports = [] } = useReports();
   const { data: contacts = [] } = useContacts();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const filtered = clients.filter((c) =>
     c.business_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -105,6 +108,33 @@ const Clients = () => {
 
   const updateField = (field: keyof ClientFormData, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  const handleSendInvite = async (client: DbClient) => {
+    if (!client.email) {
+      toast({ title: "No email", description: "This client has no email address.", variant: "destructive" });
+      return;
+    }
+    setSendingInvite(client.id);
+    try {
+      const { data, error: fnError } = await supabaseCloud.functions.invoke("send-client-invite", {
+        body: {
+          client_id: client.id,
+          client_email: client.email,
+          client_name: client.business_name,
+          invited_by_user_id: user?.id || null,
+        },
+      });
+      if (fnError || (data && data.error)) {
+        toast({ title: "Invite failed", description: data?.error || fnError?.message || "Unknown error", variant: "destructive" });
+      } else {
+        toast({ title: "Invite sent", description: `Invite sent to ${client.email}` });
+      }
+    } catch {
+      toast({ title: "Invite failed", description: "Something went wrong.", variant: "destructive" });
+    } finally {
+      setSendingInvite(null);
+    }
+  };
 
   // ── Detail view ──
   const selectedClient = selected ? clients.find((c) => c.id === selected) : null;
@@ -259,12 +289,22 @@ const Clients = () => {
                     <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(client.created_at).toLocaleDateString("en-ZA")}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={client.status} /></td>
                     <td className="px-4 py-3.5">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openEdit(client); }}
-                        className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleSendInvite(client); }}
+                          disabled={sendingInvite === client.id || !client.email}
+                          className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                          title={client.email ? "Send Invite" : "No email"}
+                        >
+                          {sendingInvite === client.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEdit(client); }}
+                          className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
