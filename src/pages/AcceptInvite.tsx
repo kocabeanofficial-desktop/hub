@@ -27,24 +27,16 @@ const AcceptInvite = () => {
     }
 
     const checkToken = async () => {
-      const { data, error } = await supabaseCloud
-        .from("client_invites")
-        .select("id, email, client_id, status, expires_at")
-        .eq("token", token)
-        .single();
+      const { data, error } = await supabaseCloud.functions.invoke("send-client-invite", {
+        body: { action: "validate", token },
+      });
 
-      if (error || !data) {
+      if (error || !data?.valid) {
         setStatus("invalid");
         return;
       }
 
-      const row = data as any;
-      if (row.status !== "pending" || new Date(row.expires_at) < new Date()) {
-        setStatus("invalid");
-        return;
-      }
-
-      setInvite({ id: row.id, email: row.email, client_id: row.client_id });
+      setInvite({ id: data.id, email: data.email, client_id: data.client_id });
       setStatus("valid");
     };
 
