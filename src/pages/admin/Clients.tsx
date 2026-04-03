@@ -289,12 +289,22 @@ const Clients = () => {
                     <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(client.created_at).toLocaleDateString("en-ZA")}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={client.status} /></td>
                     <td className="px-4 py-3.5">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openEdit(client); }}
-                        className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleSendInvite(client); }}
+                          disabled={sendingInvite === client.id || !client.email}
+                          className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                          title={client.email ? "Send Invite" : "No email"}
+                        >
+                          {sendingInvite === client.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEdit(client); }}
+                          className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
