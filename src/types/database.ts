@@ -82,11 +82,22 @@ export interface DbIntakeSubmission {
   submitter_name: string | null;
   submitter_email: string | null;
   submitter_phone: string | null;
+  whatsapp_number: string | null;
   business_name: string | null;
   requested_services: string | null;
   raw_payload: Record<string, unknown>;
   status: string;
   processing_notes: string | null;
+  campaign: string | null;
+  campaign_data: Record<string, unknown> | null;
+  trade: string | null;
+  domain_of_interest: string | null;
+  contract_term: string | null;
+  needs_logo: boolean | null;
+  project_type: string | null;
+  preferred_date: string | null;
+  preferred_time: string | null;
+  estimated_timeline: string | null;
   created_at: string;
   updated_at: string;
 }
