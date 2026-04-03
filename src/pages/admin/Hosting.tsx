@@ -136,7 +136,7 @@ const Hosting = () => {
                     <tr key={d.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3.5 font-medium text-foreground flex items-center gap-2">
                         {d.domain_name}
-                        {expiringSoon && <AlertTriangle className="h-3.5 w-3.5 text-warning" title="Expiring within 30 days" />}
+                        {expiringSoon && <span title="Expiring within 30 days"><AlertTriangle className="h-3.5 w-3.5 text-warning" /></span>}
                       </td>
                       <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{clientMap[d.client_id] || "—"}</td>
                       <td className="px-4 py-3.5"><StatusBadge status={d.status} /></td>
