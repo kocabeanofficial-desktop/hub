@@ -134,6 +134,48 @@ export type Database = {
         }
         Relationships: []
       }
+      support_tickets: {
+        Row: {
+          category: string
+          client_id: string | null
+          client_name: string | null
+          created_at: string
+          description: string | null
+          id: string
+          resolution_notes: string | null
+          source: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          resolution_notes?: string | null
+          source?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          resolution_notes?: string | null
+          source?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       upgrade_requests: {
         Row: {
           business_description: string
@@ -173,6 +215,36 @@ export type Database = {
           submitter_email?: string
           submitter_name?: string
           upgrade_type?: string
+        }
+        Relationships: []
+      }
+      whm_quota_checks: {
+        Row: {
+          alert_type: string | null
+          checked_at: string
+          domain: string
+          id: string
+          is_over_80: boolean
+          is_suspended: boolean
+          usage_percent: number
+        }
+        Insert: {
+          alert_type?: string | null
+          checked_at?: string
+          domain: string
+          id?: string
+          is_over_80?: boolean
+          is_suspended?: boolean
+          usage_percent?: number
+        }
+        Update: {
+          alert_type?: string | null
+          checked_at?: string
+          domain?: string
+          id?: string
+          is_over_80?: boolean
+          is_suspended?: boolean
+          usage_percent?: number
         }
         Relationships: []
       }
