@@ -40,6 +40,9 @@ const ClientDashboard = () => {
           <StatCard title="Action Required" value={supportTickets.filter((t) => t.priority === "urgent" || t.priority === "high").length} icon={AlertCircle} variant="warning" />
         </div>
 
+        {/* Need help? */}
+        <NeedHelpSection />
+
         {/* Projects */}
         <div className="bg-card rounded-2xl border border-border shadow-sm">
           <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-border">
