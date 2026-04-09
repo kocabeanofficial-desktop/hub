@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClientProjects, useClientReports, useClientTasks } from "@/hooks/useSupabaseData";
 import { FolderOpen, MessageSquare, FileText, AlertCircle } from "lucide-react";
+import { NeedHelpSection } from "@/components/dashboard/NeedHelpSection";
 import { Link } from "react-router-dom";
 
 const ClientDashboard = () => {
