@@ -50,6 +50,132 @@ export type Database = {
         }
         Relationships: []
       }
+      email_settings_requests: {
+        Row: {
+          client_id: string
+          created_at: string
+          domain: string
+          id: string
+          mailbox_address: string
+          request_type: string
+          requesting_email: string
+          requesting_name: string
+          status: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          domain: string
+          id?: string
+          mailbox_address: string
+          request_type?: string
+          requesting_email: string
+          requesting_name?: string
+          status?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          domain?: string
+          id?: string
+          mailbox_address?: string
+          request_type?: string
+          requesting_email?: string
+          requesting_name?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      staff_authorizations: {
+        Row: {
+          access_cpanel: boolean
+          access_email: boolean
+          access_website: boolean
+          client_id: string
+          created_at: string
+          id: string
+          owner_email: string
+          owner_name: string
+          staff_email: string
+          staff_full_name: string
+          staff_phone: string | null
+          staff_role: string | null
+          status: string
+        }
+        Insert: {
+          access_cpanel?: boolean
+          access_email?: boolean
+          access_website?: boolean
+          client_id: string
+          created_at?: string
+          id?: string
+          owner_email: string
+          owner_name: string
+          staff_email: string
+          staff_full_name: string
+          staff_phone?: string | null
+          staff_role?: string | null
+          status?: string
+        }
+        Update: {
+          access_cpanel?: boolean
+          access_email?: boolean
+          access_website?: boolean
+          client_id?: string
+          created_at?: string
+          id?: string
+          owner_email?: string
+          owner_name?: string
+          staff_email?: string
+          staff_full_name?: string
+          staff_phone?: string | null
+          staff_role?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      upgrade_requests: {
+        Row: {
+          business_description: string
+          client_id: string
+          created_at: string
+          current_platform: string
+          current_website_url: string | null
+          goals: string | null
+          id: string
+          status: string
+          submitter_email: string
+          submitter_name: string
+          upgrade_type: string
+        }
+        Insert: {
+          business_description: string
+          client_id: string
+          created_at?: string
+          current_platform?: string
+          current_website_url?: string | null
+          goals?: string | null
+          id?: string
+          status?: string
+          submitter_email: string
+          submitter_name: string
+          upgrade_type?: string
+        }
+        Update: {
+          business_description?: string
+          client_id?: string
+          created_at?: string
+          current_platform?: string
+          current_website_url?: string | null
+          goals?: string | null
+          id?: string
+          status?: string
+          submitter_email?: string
+          submitter_name?: string
+          upgrade_type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

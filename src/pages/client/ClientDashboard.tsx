@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClientProjects, useClientReports, useClientTasks } from "@/hooks/useSupabaseData";
 import { FolderOpen, MessageSquare, FileText, AlertCircle } from "lucide-react";
+import { NeedHelpSection } from "@/components/dashboard/NeedHelpSection";
 import { Link } from "react-router-dom";
 
 const ClientDashboard = () => {
@@ -38,6 +39,9 @@ const ClientDashboard = () => {
           <StatCard title="Reports" value={reports.length} icon={FileText} variant="info" />
           <StatCard title="Action Required" value={supportTickets.filter((t) => t.priority === "urgent" || t.priority === "high").length} icon={AlertCircle} variant="warning" />
         </div>
+
+        {/* Need help? */}
+        <NeedHelpSection />
 
         {/* Projects */}
         <div className="bg-card rounded-2xl border border-border shadow-sm">
