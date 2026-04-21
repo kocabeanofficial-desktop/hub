@@ -248,6 +248,105 @@ export type Database = {
         }
         Relationships: []
       }
+      zoho_customers: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          currency_code: string | null
+          display_name: string
+          email: string | null
+          id: string
+          imported_at: string
+          outstanding_receivable: number
+          phone: string | null
+          raw_payload: Json | null
+          status: string | null
+          updated_at: string
+          zoho_customer_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          currency_code?: string | null
+          display_name: string
+          email?: string | null
+          id?: string
+          imported_at?: string
+          outstanding_receivable?: number
+          phone?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          updated_at?: string
+          zoho_customer_id: string
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          currency_code?: string | null
+          display_name?: string
+          email?: string | null
+          id?: string
+          imported_at?: string
+          outstanding_receivable?: number
+          phone?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          updated_at?: string
+          zoho_customer_id?: string
+        }
+        Relationships: []
+      }
+      zoho_invoices: {
+        Row: {
+          balance: number
+          created_at: string
+          currency_code: string | null
+          customer_name: string | null
+          due_date: string | null
+          id: string
+          imported_at: string
+          invoice_date: string | null
+          invoice_number: string
+          raw_payload: Json | null
+          status: string | null
+          total: number
+          updated_at: string
+          zoho_customer_id: string | null
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          currency_code?: string | null
+          customer_name?: string | null
+          due_date?: string | null
+          id?: string
+          imported_at?: string
+          invoice_date?: string | null
+          invoice_number: string
+          raw_payload?: Json | null
+          status?: string | null
+          total?: number
+          updated_at?: string
+          zoho_customer_id?: string | null
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          currency_code?: string | null
+          customer_name?: string | null
+          due_date?: string | null
+          id?: string
+          imported_at?: string
+          invoice_date?: string | null
+          invoice_number?: string
+          raw_payload?: Json | null
+          status?: string | null
+          total?: number
+          updated_at?: string
+          zoho_customer_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
