@@ -149,7 +149,7 @@ const ZohoImports = () => {
     let success = 0;
     let failed = 0;
 
-    const table = importType === "customers" ? "zoho_customers" : "zoho_invoices";
+    const table = importType === "customers" ? "zoho_customers_raw" : "zoho_invoices_raw";
     const conflictKey = importType === "customers" ? "zoho_customer_id" : "invoice_number";
 
     // Batch in chunks of 100

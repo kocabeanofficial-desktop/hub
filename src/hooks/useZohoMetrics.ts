@@ -15,10 +15,10 @@ export const useZohoMetrics = () =>
 
       const [invoicesRes, customersRes] = await Promise.all([
         supabase
-          .from("zoho_invoices")
+          .from("zoho_invoices_raw")
           .select("balance, due_date, status"),
         supabase
-          .from("zoho_customers")
+          .from("zoho_customers_raw")
           .select("id", { count: "exact", head: true }),
       ]);
 
