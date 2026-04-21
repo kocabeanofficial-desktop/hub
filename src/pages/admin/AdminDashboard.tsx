@@ -16,6 +16,7 @@ const AdminDashboard = () => {
   const { data: tasks = [] } = useTasks();
   const { data: reports = [] } = useReports();
   const { data: activityEvents = [] } = useAutomationEvents();
+  const { data: zoho } = useZohoMetrics();
 
   const activeClients = clients.filter((c) => c.status === "active").length;
   const activeProjects = projects.length;
@@ -40,6 +41,34 @@ const AdminDashboard = () => {
           <StatCard title="Sites In Progress" value={websitesInProgress} icon={Globe} variant="info" />
           <StatCard title="Open Support" value={openSupport} icon={MessageSquare} variant="warning" />
           <StatCard title="Reports Pending" value={pendingReports} icon={FileText} variant="default" />
+        </div>
+
+        {/* Finance metrics from Zoho imports */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-heading font-bold text-foreground">Finance (Zoho)</h2>
+            <Link to="/admin/imports" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">Manage imports →</Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <StatCard
+              title="Total Outstanding"
+              value={zoho ? formatZAR(zoho.totalOutstanding) : "—"}
+              icon={Wallet}
+              variant="primary"
+            />
+            <StatCard
+              title="Overdue Invoices"
+              value={zoho?.overdueCount ?? "—"}
+              icon={AlertTriangle}
+              variant="warning"
+            />
+            <StatCard
+              title="Active Customers"
+              value={zoho?.activeCustomers ?? "—"}
+              icon={UserCheck}
+              variant="success"
+            />
+          </div>
         </div>
 
         {/* Recent Activity */}
