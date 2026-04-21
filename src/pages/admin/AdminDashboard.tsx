@@ -3,8 +3,10 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import {
   Inbox, Users, FolderOpen, Globe, MessageSquare, FileText, Activity,
+  Wallet, AlertTriangle, UserCheck,
 } from "lucide-react";
 import { useClients, useProjects, useIntakeSubmissions, useReports, useAutomationEvents, useTasks } from "@/hooks/useSupabaseData";
+import { useZohoMetrics, formatZAR } from "@/hooks/useZohoMetrics";
 import { Link } from "react-router-dom";
 
 const AdminDashboard = () => {
