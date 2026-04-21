@@ -16,34 +16,36 @@ type ImportType = "customers" | "invoices";
 
 const NONE = "__none__";
 
-const customerFields = [
-  { key: "zoho_customer_id", label: "Customer ID *", required: true, hints: ["customer id", "contact id", "zoho id"] },
-  { key: "display_name", label: "Display name *", required: true, hints: ["display name", "customer name", "contact name", "name"] },
-  { key: "company_name", label: "Company name", hints: ["company name", "company"] },
-  { key: "email", label: "Email", hints: ["email", "email address", "primary email"] },
-  { key: "phone", label: "Phone", hints: ["phone", "mobile", "phone number"] },
-  { key: "currency_code", label: "Currency", hints: ["currency", "currency code"] },
-  { key: "outstanding_receivable", label: "Outstanding (ZAR)", hints: ["outstanding receivable", "receivables", "outstanding", "balance"] },
-  { key: "status", label: "Status", hints: ["status", "customer status"] },
-];
+// Only the key fields are mapped explicitly. The full CSV row is stored in raw_data.
+const customerKeyFields = [
+  {
+    key: "zoho_customer_id",
+    label: "Customer ID *",
+    required: true,
+    hints: ["customer id", "contact id", "zoho id"],
+  },
+] as const;
 
-const invoiceFields = [
-  { key: "invoice_number", label: "Invoice number *", required: true, hints: ["invoice number", "invoice no", "invoice#", "invoice"] },
-  { key: "zoho_customer_id", label: "Customer ID", hints: ["customer id", "contact id"] },
-  { key: "customer_name", label: "Customer name", hints: ["customer name", "contact name", "client name"] },
-  { key: "invoice_date", label: "Invoice date", hints: ["invoice date", "date"] },
-  { key: "due_date", label: "Due date", hints: ["due date", "duedate"] },
-  { key: "status", label: "Status", hints: ["invoice status", "status"] },
-  { key: "total", label: "Total", hints: ["total", "invoice total", "amount"] },
-  { key: "balance", label: "Balance", hints: ["balance", "outstanding", "balance due"] },
-  { key: "currency_code", label: "Currency", hints: ["currency", "currency code"] },
-];
+const invoiceKeyFields = [
+  {
+    key: "zoho_invoice_id",
+    label: "Invoice ID *",
+    required: true,
+    hints: ["invoice id", "invoice number", "invoice no", "invoice#", "invoice"],
+  },
+  {
+    key: "zoho_customer_id",
+    label: "Customer ID *",
+    required: true,
+    hints: ["customer id", "contact id", "zoho customer id"],
+  },
+] as const;
 
-type FieldDef = (typeof customerFields)[number];
+type FieldDef = { key: string; label: string; required?: boolean; hints: readonly string[] };
 
 const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const autoMap = (headers: string[], fields: FieldDef[]) => {
+const autoMap = (headers: string[], fields: readonly FieldDef[]) => {
   const map: Record<string, string> = {};
   for (const field of fields) {
     const match = headers.find((h) => {
@@ -55,30 +57,6 @@ const autoMap = (headers: string[], fields: FieldDef[]) => {
   return map;
 };
 
-const parseDate = (v: unknown): string | null => {
-  if (!v) return null;
-  const s = String(v).trim();
-  if (!s) return null;
-  // Try ISO first
-  const iso = new Date(s);
-  if (!isNaN(iso.getTime())) return iso.toISOString().slice(0, 10);
-  // dd/mm/yyyy
-  const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-  if (m) {
-    const [, d, mo, y] = m;
-    const yr = y.length === 2 ? `20${y}` : y;
-    return `${yr}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  return null;
-};
-
-const parseNumber = (v: unknown): number => {
-  if (v === null || v === undefined || v === "") return 0;
-  const cleaned = String(v).replace(/[^0-9.\-]/g, "");
-  const n = Number.parseFloat(cleaned);
-  return Number.isFinite(n) ? n : 0;
-};
-
 const ZohoImports = () => {
   const [importType, setImportType] = useState<ImportType>("invoices");
   const [rows, setRows] = useState<Record<string, string>[]>([]);
@@ -88,7 +66,7 @@ const ZohoImports = () => {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
 
-  const fields = importType === "customers" ? customerFields : invoiceFields;
+  const fields: readonly FieldDef[] = importType === "customers" ? customerKeyFields : invoiceKeyFields;
 
   const requiredOk = useMemo(
     () => fields.filter((f) => f.required).every((f) => mapping[f.key]),
@@ -119,26 +97,34 @@ const ZohoImports = () => {
   const handleTypeChange = (val: string) => {
     const t = val as ImportType;
     setImportType(t);
-    setMapping(headers.length ? autoMap(headers, t === "customers" ? customerFields : invoiceFields) : {});
+    const nextFields = t === "customers" ? customerKeyFields : invoiceKeyFields;
+    setMapping(headers.length ? autoMap(headers, nextFields) : {});
     setResult(null);
   };
 
   const buildPayload = (row: Record<string, string>) => {
-    const out: Record<string, unknown> = { raw_payload: row };
-    for (const field of fields) {
-      const src = mapping[field.key];
-      if (!src) continue;
-      const val = row[src];
-      if (field.key === "invoice_date" || field.key === "due_date") {
-        out[field.key] = parseDate(val);
-      } else if (field.key === "total" || field.key === "balance" || field.key === "outstanding_receivable") {
-        out[field.key] = parseNumber(val);
-      } else {
-        const trimmed = val ? String(val).trim() : null;
-        out[field.key] = trimmed || null;
-      }
+    const now = new Date().toISOString();
+    if (importType === "customers") {
+      const customerIdSrc = mapping["zoho_customer_id"];
+      const customerId = customerIdSrc ? String(row[customerIdSrc] ?? "").trim() : "";
+      if (!customerId) return null;
+      return {
+        zoho_customer_id: customerId,
+        raw_data: row,
+        synced_at: now,
+      };
     }
-    return out;
+    const invoiceIdSrc = mapping["zoho_invoice_id"];
+    const customerIdSrc = mapping["zoho_customer_id"];
+    const invoiceId = invoiceIdSrc ? String(row[invoiceIdSrc] ?? "").trim() : "";
+    const customerId = customerIdSrc ? String(row[customerIdSrc] ?? "").trim() : "";
+    if (!invoiceId) return null;
+    return {
+      zoho_invoice_id: invoiceId,
+      zoho_customer_id: customerId || null,
+      raw_data: row,
+      synced_at: now,
+    };
   };
 
   const handleImport = async () => {
@@ -150,14 +136,12 @@ const ZohoImports = () => {
     let failed = 0;
 
     const table = importType === "customers" ? "zoho_customers_raw" : "zoho_invoices_raw";
-    const conflictKey = importType === "customers" ? "zoho_customer_id" : "invoice_number";
+    const conflictKey = importType === "customers" ? "zoho_customer_id" : "zoho_invoice_id";
 
-    // Batch in chunks of 100
     const chunkSize = 100;
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize).map(buildPayload);
-      // Filter out rows missing required key
-      const valid = chunk.filter((r) => r[conflictKey]);
+      const valid = chunk.filter((r): r is NonNullable<typeof r> => r !== null);
       const invalid = chunk.length - valid.length;
       failed += invalid;
       if (invalid) errors.push(`${invalid} row(s) skipped: missing ${conflictKey}`);
@@ -185,6 +169,8 @@ const ZohoImports = () => {
     }
   };
 
+  const previewHeaders = headers.slice(0, 6);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -211,7 +197,9 @@ const ZohoImports = () => {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">2. Upload your CSV</CardTitle>
-            <CardDescription>Export from Zoho Books → {importType === "invoices" ? "Sales → Invoices" : "Contacts → Customers"} → Export as CSV.</CardDescription>
+            <CardDescription>
+              Export from Zoho Books → {importType === "invoices" ? "Sales → Invoices" : "Contacts → Customers"} → Export as CSV.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-xl p-8 cursor-pointer hover:bg-muted/30 transition-colors">
@@ -236,8 +224,10 @@ const ZohoImports = () => {
         {headers.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">3. Map columns</CardTitle>
-              <CardDescription>We auto-matched what we could. Review and adjust below.</CardDescription>
+              <CardTitle className="text-base">3. Map key columns</CardTitle>
+              <CardDescription>
+                Only the ID columns need to be mapped. Every other column is stored automatically.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid sm:grid-cols-2 gap-4">
@@ -283,21 +273,22 @@ const ZohoImports = () => {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">4. Preview (first 5 rows)</CardTitle>
+              <CardDescription>Showing the first {previewHeaders.length} of {headers.length} columns. All columns are stored.</CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {fields.filter((f) => mapping[f.key]).map((f) => (
-                      <TableHead key={f.key}>{f.label.replace(" *", "")}</TableHead>
+                    {previewHeaders.map((h) => (
+                      <TableHead key={h}>{h}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.slice(0, 5).map((r, i) => (
                     <TableRow key={i}>
-                      {fields.filter((f) => mapping[f.key]).map((f) => (
-                        <TableCell key={f.key} className="text-xs">{r[mapping[f.key]] || "—"}</TableCell>
+                      {previewHeaders.map((h) => (
+                        <TableCell key={h} className="text-xs">{r[h] || "—"}</TableCell>
                       ))}
                     </TableRow>
                   ))}
@@ -313,7 +304,9 @@ const ZohoImports = () => {
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
               {importing ? "Importing…" : `Import ${rows.length} ${importType}`}
             </Button>
-            <p className="text-xs text-muted-foreground">Existing records (matched by {importType === "customers" ? "Customer ID" : "Invoice number"}) will be updated.</p>
+            <p className="text-xs text-muted-foreground">
+              Existing records (matched by {importType === "customers" ? "Customer ID" : "Invoice ID"}) will be updated.
+            </p>
           </div>
         )}
 
