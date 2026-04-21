@@ -7,23 +7,33 @@ export interface ZohoMetrics {
   activeCustomers: number;
 }
 
+type RawClient = {
+  from: (t: string) => {
+    select: (
+      cols: string,
+      opts?: { count?: "exact"; head?: boolean },
+    ) => Promise<{
+      data: Array<{ balance?: number | string | null; due_date?: string | null; status?: string | null }> | null;
+      count: number | null;
+      error: { message: string } | null;
+    }>;
+  };
+};
+
 export const useZohoMetrics = () =>
   useQuery<ZohoMetrics>({
     queryKey: ["zoho_metrics"],
     queryFn: async () => {
       const today = new Date().toISOString().slice(0, 10);
+      const client = supabase as unknown as RawClient;
 
       const [invoicesRes, customersRes] = await Promise.all([
-        supabase
-          .from("zoho_invoices")
-          .select("balance, due_date, status"),
-        supabase
-          .from("zoho_customers")
-          .select("id", { count: "exact", head: true }),
+        client.from("zoho_invoices_raw").select("balance, due_date, status"),
+        client.from("zoho_customers_raw").select("id", { count: "exact", head: true }),
       ]);
 
-      if (invoicesRes.error) throw invoicesRes.error;
-      if (customersRes.error) throw customersRes.error;
+      if (invoicesRes.error) throw new Error(invoicesRes.error.message);
+      if (customersRes.error) throw new Error(customersRes.error.message);
 
       const invoices = invoicesRes.data ?? [];
       const totalOutstanding = invoices.reduce((sum, inv) => sum + Number(inv.balance ?? 0), 0);
