@@ -163,10 +163,12 @@ const ZohoImports = () => {
       if (invalid) errors.push(`${invalid} row(s) skipped: missing ${conflictKey}`);
 
       if (valid.length) {
-        const { error } = await supabase
-          .from(table)
-          // @ts-expect-error - dynamic table
-          .upsert(valid, { onConflict: conflictKey });
+        const client = supabase as unknown as {
+          from: (t: string) => {
+            upsert: (rows: unknown[], opts: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
+          };
+        };
+        const { error } = await client.from(table).upsert(valid, { onConflict: conflictKey });
         if (error) {
           failed += valid.length;
           errors.push(error.message);
