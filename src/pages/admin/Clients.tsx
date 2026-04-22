@@ -37,8 +37,20 @@ const emptyForm: ClientFormData = {
   notes: "",
 };
 
+type SortOption = "name-asc" | "name-desc" | "newest" | "oldest" | "business-asc";
+
 const Clients = () => {
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlSearch = searchParams.get("search") || "";
+  const urlStatus = (searchParams.get("status") as "all" | "active" | "inactive") || "all";
+  const urlSort = (searchParams.get("sort") as SortOption) || "name-asc";
+
+  const [searchInput, setSearchInput] = useState(urlSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">(urlStatus);
+  const [sortBy, setSortBy] = useState<SortOption>(urlSort);
+
   const [selected, setSelected] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<DbClient | null>(null);
@@ -54,10 +66,71 @@ const Clients = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const filtered = clients.filter((c) =>
-    c.business_name.toLowerCase().includes(search.toLowerCase()) ||
-    (c.email || "").toLowerCase().includes(search.toLowerCase())
-  );
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Sync filters → URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (sortBy !== "name-asc") params.set("sort", sortBy);
+    setSearchParams(params, { replace: true });
+  }, [debouncedSearch, statusFilter, sortBy, setSearchParams]);
+
+  const contactByClient = useMemo(() => {
+    const map = new Map<string, string>();
+    contacts.forEach((c) => {
+      if (c.is_primary && c.full_name) map.set(c.client_id, c.full_name);
+    });
+    return map;
+  }, [contacts]);
+
+  const filtered = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    let list = clients.filter((c) => {
+      if (statusFilter === "active" && c.status !== "active") return false;
+      if (statusFilter === "inactive" && c.status === "active") return false;
+      if (!q) return true;
+      const fullName = (contactByClient.get(c.id) || "").toLowerCase();
+      return (
+        c.business_name.toLowerCase().includes(q) ||
+        (c.email || "").toLowerCase().includes(q) ||
+        fullName.includes(q)
+      );
+    });
+
+    list = [...list].sort((a, b) => {
+      switch (sortBy) {
+        case "name-asc":
+        case "business-asc":
+          return a.business_name.localeCompare(b.business_name);
+        case "name-desc":
+          return b.business_name.localeCompare(a.business_name);
+        case "newest":
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case "oldest":
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        default:
+          return 0;
+      }
+    });
+    return list;
+  }, [clients, debouncedSearch, statusFilter, sortBy, contactByClient]);
+
+  const isFilterActive = !!debouncedSearch || statusFilter !== "all" || sortBy !== "name-asc";
+  const activeFilterCount =
+    (debouncedSearch ? 1 : 0) + (statusFilter !== "all" ? 1 : 0) + (sortBy !== "name-asc" ? 1 : 0);
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setDebouncedSearch("");
+    setStatusFilter("all");
+    setSortBy("name-asc");
+  };
 
   const openCreate = () => {
     setEditingClient(null);
