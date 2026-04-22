@@ -23,6 +23,7 @@ import { ClientHostingSection } from "@/components/clients/ClientHostingSection"
 
 type ClientFormData = {
   business_name: string;
+  status: string;
   email: string;
   phone: string;
   website_url: string;
@@ -31,11 +32,21 @@ type ClientFormData = {
 
 const emptyForm: ClientFormData = {
   business_name: "",
+  status: "active",
   email: "",
   phone: "",
   website_url: "",
   notes: "",
 };
+
+const STATUS_OPTIONS: { value: string; label: string; dot: string }[] = [
+  { value: "active", label: "Active", dot: "bg-success" },
+  { value: "inactive", label: "Inactive", dot: "bg-muted-foreground" },
+  { value: "at_risk", label: "At Risk", dot: "bg-warning" },
+  { value: "suspended", label: "Suspended", dot: "bg-destructive" },
+  { value: "churned", label: "Churned", dot: "bg-border" },
+  { value: "returning", label: "Returning", dot: "bg-info" },
+];
 
 type SortOption = "name-asc" | "name-desc" | "newest" | "oldest" | "business-asc";
 
@@ -142,6 +153,7 @@ const Clients = () => {
     setEditingClient(client);
     setForm({
       business_name: client.business_name || "",
+      status: client.status || "active",
       email: client.email || "",
       phone: client.phone || "",
       website_url: client.website_url || "",
@@ -155,10 +167,15 @@ const Clients = () => {
       toast({ title: "Validation error", description: "Name is required.", variant: "destructive" });
       return;
     }
+    if (!form.status) {
+      toast({ title: "Validation error", description: "Status is required.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
 
     const payload = {
       business_name: form.business_name.trim(),
+      status: form.status,
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
       website_url: form.website_url.trim() || null,
@@ -179,7 +196,11 @@ const Clients = () => {
       return;
     }
 
-    toast({ title: editingClient ? "Client updated" : "Client created" });
+    const statusLabel = STATUS_OPTIONS.find((s) => s.value === form.status)?.label || form.status;
+    toast({
+      title: editingClient ? "Client updated" : "Client created",
+      description: editingClient ? `Client status updated to ${statusLabel}` : undefined,
+    });
     queryClient.invalidateQueries({ queryKey: ["clients"] });
     setDialogOpen(false);
   };
@@ -518,6 +539,31 @@ const ClientFormDialog = ({ open, onOpenChange, form, updateField, onSave, savin
         <div className="grid gap-1.5">
           <Label htmlFor="business_name">Name *</Label>
           <Input id="business_name" value={form.business_name} onChange={(e) => updateField("business_name", e.target.value)} placeholder="e.g. Acme Holdings" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="status">Status *</Label>
+          <Select value={form.status} onValueChange={(v) => updateField("status", v)}>
+            <SelectTrigger id="status">
+              <SelectValue placeholder="Select status">
+                {form.status && (
+                  <span className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${STATUS_OPTIONS.find((s) => s.value === form.status)?.dot || "bg-muted"}`} />
+                    {STATUS_OPTIONS.find((s) => s.value === form.status)?.label || form.status}
+                  </span>
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  <span className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${opt.dot}`} />
+                    {opt.label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="grid gap-1.5">
