@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { parse, format, isValid } from "date-fns";
 import * as pdfjsLib from "pdfjs-dist";
-// @ts-expect-error – Vite worker import
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -360,12 +359,12 @@ const FieldRow = ({
     <Label className="text-xs">{label}</Label>
     {input}
     {status === "found" && (
-      <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+      <p className="text-xs text-primary flex items-center gap-1">
         <CheckCircle2 className="h-3 w-3" /> Auto-filled from PDF
       </p>
     )}
     {status === "missing" && (
-      <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+      <p className="text-xs text-destructive flex items-center gap-1">
         <AlertTriangle className="h-3 w-3" /> Not found — please enter manually
       </p>
     )}

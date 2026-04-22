@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { PdfInvoiceUpload } from "@/components/imports/PdfInvoiceUpload";
 
 type ImportType = "customers" | "invoices";
 
@@ -212,8 +213,10 @@ const ZohoImports = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-heading font-extrabold text-foreground">Imports</h1>
-          <p className="text-sm text-muted-foreground mt-1">Upload Zoho Books CSV exports to sync customers and invoices.</p>
+          <p className="text-sm text-muted-foreground mt-1">Upload Zoho Books CSV exports to sync customers and invoices, or upload a single invoice PDF.</p>
         </div>
+
+        <PdfInvoiceUpload />
 
         <Card>
           <CardHeader>
