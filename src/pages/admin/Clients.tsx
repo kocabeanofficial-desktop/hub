@@ -1,13 +1,16 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useClients, useProjects, useTasks, useReports, useContacts } from "@/hooks/useSupabaseData";
-import { useState } from "react";
-import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2, Send } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2, Send, BarChart3, ArrowUpDown, X } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase, supabaseCloud } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -34,8 +37,20 @@ const emptyForm: ClientFormData = {
   notes: "",
 };
 
+type SortOption = "name-asc" | "name-desc" | "newest" | "oldest" | "business-asc";
+
 const Clients = () => {
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlSearch = searchParams.get("search") || "";
+  const urlStatus = (searchParams.get("status") as "all" | "active" | "inactive") || "all";
+  const urlSort = (searchParams.get("sort") as SortOption) || "name-asc";
+
+  const [searchInput, setSearchInput] = useState(urlSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">(urlStatus);
+  const [sortBy, setSortBy] = useState<SortOption>(urlSort);
+
   const [selected, setSelected] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<DbClient | null>(null);
@@ -51,10 +66,71 @@ const Clients = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const filtered = clients.filter((c) =>
-    c.business_name.toLowerCase().includes(search.toLowerCase()) ||
-    (c.email || "").toLowerCase().includes(search.toLowerCase())
-  );
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Sync filters → URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (sortBy !== "name-asc") params.set("sort", sortBy);
+    setSearchParams(params, { replace: true });
+  }, [debouncedSearch, statusFilter, sortBy, setSearchParams]);
+
+  const contactByClient = useMemo(() => {
+    const map = new Map<string, string>();
+    contacts.forEach((c) => {
+      if (c.is_primary && c.full_name) map.set(c.client_id, c.full_name);
+    });
+    return map;
+  }, [contacts]);
+
+  const filtered = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    let list = clients.filter((c) => {
+      if (statusFilter === "active" && c.status !== "active") return false;
+      if (statusFilter === "inactive" && c.status === "active") return false;
+      if (!q) return true;
+      const fullName = (contactByClient.get(c.id) || "").toLowerCase();
+      return (
+        c.business_name.toLowerCase().includes(q) ||
+        (c.email || "").toLowerCase().includes(q) ||
+        fullName.includes(q)
+      );
+    });
+
+    list = [...list].sort((a, b) => {
+      switch (sortBy) {
+        case "name-asc":
+        case "business-asc":
+          return a.business_name.localeCompare(b.business_name);
+        case "name-desc":
+          return b.business_name.localeCompare(a.business_name);
+        case "newest":
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case "oldest":
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        default:
+          return 0;
+      }
+    });
+    return list;
+  }, [clients, debouncedSearch, statusFilter, sortBy, contactByClient]);
+
+  const isFilterActive = !!debouncedSearch || statusFilter !== "all" || sortBy !== "name-asc";
+  const activeFilterCount =
+    (debouncedSearch ? 1 : 0) + (statusFilter !== "all" ? 1 : 0) + (sortBy !== "name-asc" ? 1 : 0);
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setDebouncedSearch("");
+    setStatusFilter("all");
+    setSortBy("name-asc");
+  };
 
   const openCreate = () => {
     setEditingClient(null);
@@ -265,15 +341,73 @@ const Clients = () => {
           </Button>
         </div>
 
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search clients..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-input bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition"
-          />
+        {/* Filter bar */}
+        <div className="bg-muted/30 border border-border rounded-2xl p-3 sm:p-4 space-y-3 sm:space-y-0">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Search */}
+            <div className="relative flex-1 sm:max-w-sm">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search by name, email…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-input bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition"
+              />
+            </div>
+
+            {/* Status + Sort row */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                <BarChart3 className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+                  <SelectTrigger className="w-full sm:w-[150px] h-10 rounded-xl bg-card text-sm">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    <SelectItem value="active">Active Only</SelectItem>
+                    <SelectItem value="inactive">Inactive Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                  <SelectTrigger className="w-full sm:w-[170px] h-10 rounded-xl bg-card text-sm">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name-asc">Name (A–Z)</SelectItem>
+                    <SelectItem value="name-desc">Name (Z–A)</SelectItem>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="oldest">Oldest First</SelectItem>
+                    <SelectItem value="business-asc">Business Name (A–Z)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Clear filters */}
+            {isFilterActive && (
+              <div className="flex items-center gap-2 sm:ml-auto">
+                <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded-full">
+                  {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""} active
+                </span>
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 gap-1.5 text-xs">
+                  <X className="h-3.5 w-3.5" /> Clear
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {isFilterActive && (
+            <p className="text-xs text-muted-foreground pt-1">
+              {filtered.length} result{filtered.length === 1 ? "" : "s"}
+              {clients.length > 0 && <> of {clients.length}</>}
+            </p>
+          )}
         </div>
 
         {isError && (
