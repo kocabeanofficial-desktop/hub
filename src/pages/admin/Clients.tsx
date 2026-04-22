@@ -153,6 +153,7 @@ const Clients = () => {
     setEditingClient(client);
     setForm({
       business_name: client.business_name || "",
+      status: client.status || "active",
       email: client.email || "",
       phone: client.phone || "",
       website_url: client.website_url || "",
@@ -166,10 +167,15 @@ const Clients = () => {
       toast({ title: "Validation error", description: "Name is required.", variant: "destructive" });
       return;
     }
+    if (!form.status) {
+      toast({ title: "Validation error", description: "Status is required.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
 
     const payload = {
       business_name: form.business_name.trim(),
+      status: form.status,
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
       website_url: form.website_url.trim() || null,
@@ -190,7 +196,11 @@ const Clients = () => {
       return;
     }
 
-    toast({ title: editingClient ? "Client updated" : "Client created" });
+    const statusLabel = STATUS_OPTIONS.find((s) => s.value === form.status)?.label || form.status;
+    toast({
+      title: editingClient ? "Client updated" : "Client created",
+      description: editingClient ? `Client status updated to ${statusLabel}` : undefined,
+    });
     queryClient.invalidateQueries({ queryKey: ["clients"] });
     setDialogOpen(false);
   };
