@@ -86,6 +86,42 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_invoices: {
+        Row: {
+          amount_due: number
+          created_at: string
+          customer_name: string | null
+          due_date: string | null
+          id: string
+          invoice_date: string
+          invoice_number: string
+          pdf_url: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          amount_due: number
+          created_at?: string
+          customer_name?: string | null
+          due_date?: string | null
+          id?: string
+          invoice_date: string
+          invoice_number: string
+          pdf_url: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          amount_due?: number
+          created_at?: string
+          customer_name?: string | null
+          due_date?: string | null
+          id?: string
+          invoice_date?: string
+          invoice_number?: string
+          pdf_url?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       staff_authorizations: {
         Row: {
           access_cpanel: boolean
