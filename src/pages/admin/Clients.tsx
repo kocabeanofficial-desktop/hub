@@ -341,15 +341,73 @@ const Clients = () => {
           </Button>
         </div>
 
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search clients..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-input bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition"
-          />
+        {/* Filter bar */}
+        <div className="bg-muted/30 border border-border rounded-2xl p-3 sm:p-4 space-y-3 sm:space-y-0">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Search */}
+            <div className="relative flex-1 sm:max-w-sm">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search by name, email…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-input bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition"
+              />
+            </div>
+
+            {/* Status + Sort row */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                <BarChart3 className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+                  <SelectTrigger className="w-full sm:w-[150px] h-10 rounded-xl bg-card text-sm">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    <SelectItem value="active">Active Only</SelectItem>
+                    <SelectItem value="inactive">Inactive Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                  <SelectTrigger className="w-full sm:w-[170px] h-10 rounded-xl bg-card text-sm">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name-asc">Name (A–Z)</SelectItem>
+                    <SelectItem value="name-desc">Name (Z–A)</SelectItem>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="oldest">Oldest First</SelectItem>
+                    <SelectItem value="business-asc">Business Name (A–Z)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Clear filters */}
+            {isFilterActive && (
+              <div className="flex items-center gap-2 sm:ml-auto">
+                <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded-full">
+                  {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""} active
+                </span>
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 gap-1.5 text-xs">
+                  <X className="h-3.5 w-3.5" /> Clear
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {isFilterActive && (
+            <p className="text-xs text-muted-foreground pt-1">
+              {filtered.length} result{filtered.length === 1 ? "" : "s"}
+              {clients.length > 0 && <> of {clients.length}</>}
+            </p>
+          )}
         </div>
 
         {isError && (
