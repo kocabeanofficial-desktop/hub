@@ -23,6 +23,7 @@ import { ClientHostingSection } from "@/components/clients/ClientHostingSection"
 
 type ClientFormData = {
   business_name: string;
+  status: string;
   email: string;
   phone: string;
   website_url: string;
@@ -31,11 +32,21 @@ type ClientFormData = {
 
 const emptyForm: ClientFormData = {
   business_name: "",
+  status: "active",
   email: "",
   phone: "",
   website_url: "",
   notes: "",
 };
+
+const STATUS_OPTIONS: { value: string; label: string; dot: string }[] = [
+  { value: "active", label: "Active", dot: "bg-success" },
+  { value: "inactive", label: "Inactive", dot: "bg-muted-foreground" },
+  { value: "at_risk", label: "At Risk", dot: "bg-warning" },
+  { value: "suspended", label: "Suspended", dot: "bg-destructive" },
+  { value: "churned", label: "Churned", dot: "bg-border" },
+  { value: "returning", label: "Returning", dot: "bg-info" },
+];
 
 type SortOption = "name-asc" | "name-desc" | "newest" | "oldest" | "business-asc";
 
