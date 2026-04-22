@@ -135,31 +135,67 @@ const ZohoImports = () => {
     let success = 0;
     let failed = 0;
 
-    const table = importType === "customers" ? "zoho_customers_raw" : "zoho_invoices_raw";
     const conflictKey = importType === "customers" ? "zoho_customer_id" : "zoho_invoice_id";
 
-    const chunkSize = 100;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize).map(buildPayload);
-      const valid = chunk.filter((r): r is NonNullable<typeof r> => r !== null);
-      const invalid = chunk.length - valid.length;
-      failed += invalid;
-      if (invalid) errors.push(`${invalid} row(s) skipped: missing ${conflictKey}`);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("You must be logged in to import data.");
+      }
 
-      if (valid.length) {
-        const client = supabase as unknown as {
-          from: (t: string) => {
-            upsert: (rows: unknown[], opts: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
-          };
-        };
-        const { error } = await client.from(table).upsert(valid, { onConflict: conflictKey });
-        if (error) {
-          failed += valid.length;
-          errors.push(error.message);
-        } else {
-          success += valid.length;
+      const allPayloads = rows.map(buildPayload);
+      const validPayloads = allPayloads.filter((r): r is NonNullable<typeof r> => r !== null);
+      const invalidCount = allPayloads.length - validPayloads.length;
+      if (invalidCount) {
+        failed += invalidCount;
+        errors.push(`${invalidCount} row(s) skipped: missing ${conflictKey}`);
+      }
+
+      const chunkSize = 100;
+      for (let i = 0; i < validPayloads.length; i += chunkSize) {
+        const chunk = validPayloads.slice(i, i + chunkSize);
+
+        const response = await fetch(
+          "https://yxccaoiznqklgnxdsdlr.supabase.co/functions/v1/zoho-csv-import",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ type: importType, data: chunk }),
+          },
+        );
+
+        if (!response.ok) {
+          const text = await response.text().catch(() => "");
+          let message = `Import failed (${response.status})`;
+          try {
+            const parsed = text ? JSON.parse(text) : null;
+            if (parsed?.error) message = parsed.error;
+            else if (parsed?.message) message = parsed.message;
+            else if (text) message = text;
+          } catch {
+            if (text) message = text;
+          }
+          failed += chunk.length;
+          errors.push(message);
+          continue;
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        const successCount = typeof payload?.success === "number" ? payload.success : chunk.length;
+        const failedCount = typeof payload?.failed === "number" ? payload.failed : 0;
+        success += successCount;
+        failed += failedCount;
+        if (Array.isArray(payload?.errors)) {
+          for (const e of payload.errors) errors.push(String(e));
         }
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Import failed";
+      errors.push(message);
+      toast({ title: "Import failed", description: message, variant: "destructive" });
     }
 
     setResult({ success, failed, errors: errors.slice(0, 5) });
