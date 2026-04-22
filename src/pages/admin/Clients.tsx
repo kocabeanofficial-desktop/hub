@@ -1,13 +1,16 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useClients, useProjects, useTasks, useReports, useContacts } from "@/hooks/useSupabaseData";
-import { useState } from "react";
-import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2, Send } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2, Send, BarChart3, ArrowUpDown, X } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase, supabaseCloud } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
