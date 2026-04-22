@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { parse, format, isValid } from "date-fns";
 import * as pdfjsLib from "pdfjs-dist";
