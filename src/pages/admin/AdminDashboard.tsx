@@ -20,6 +20,24 @@ const AdminDashboard = () => {
   const { data: reports = [] } = useReports();
   const { data: activityEvents = [] } = useAutomationEvents();
   const { data: zoho } = useZohoMetrics();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("enquiries-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "intake_submissions" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["intake_submissions"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const activeClients = clients.filter((c) => c.status === "active").length;
   const activeProjects = projects.length;
