@@ -254,8 +254,11 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
+    // Log the real error server-side for debugging via Functions → Logs.
+    // Never echo internal error details back to the client.
+    console.error("send-client-invite unhandled error:", err);
     return new Response(
-      JSON.stringify({ error: (err as Error).message || "Internal server error" }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
