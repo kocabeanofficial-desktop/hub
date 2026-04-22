@@ -6,6 +6,63 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// External Supabase project (where admin_users table and admin auth live).
+// These are publishable values, safe to embed.
+const EXTERNAL_SUPABASE_URL = "https://yxccaoiznqklgnxdsdlr.supabase.co";
+const EXTERNAL_SUPABASE_ANON_KEY = "sb_publishable_0uD0yzrWL6uBDjzQCEBpcg_t80Sj2ng";
+
+const MIN_PASSWORD_LENGTH = 8;
+
+/**
+ * Validates that the caller is an authenticated active super_admin in the EXTERNAL Supabase project.
+ * Returns null on success, or a Response on failure (to be returned directly to the client).
+ */
+async function requireAdminCaller(req: Request): Promise<Response | null> {
+  const authHeader = req.headers.get("Authorization") || req.headers.get("authorization");
+  if (!authHeader?.toLowerCase().startsWith("bearer ")) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized: missing bearer token" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+  const token = authHeader.slice("bearer ".length).trim();
+
+  // Verify the token against the EXTERNAL Supabase auth (where admins authenticate).
+  const externalClient = createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: userRes, error: userErr } = await externalClient.auth.getUser(token);
+  if (userErr || !userRes?.user) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized: invalid session" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Confirm the caller is an active super_admin in the external admin_users table.
+  // Use a fresh client scoped with the user's JWT so RLS applies normally.
+  const scopedClient = createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const { data: adminRow, error: adminErr } = await scopedClient
+    .from("admin_users")
+    .select("role, is_active")
+    .eq("user_id", userRes.user.id)
+    .maybeSingle();
+
+  if (adminErr || !adminRow || adminRow.is_active !== true || adminRow.role !== "super_admin") {
+    return new Response(
+      JSON.stringify({ error: "Forbidden: admin role required" }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -23,7 +80,7 @@ Deno.serve(async (req) => {
     // ── Validate token action (public, no auth needed) ──
     if (action === "validate") {
       const { token } = body;
-      if (!token) {
+      if (!token || typeof token !== "string") {
         return new Response(
           JSON.stringify({ error: "token is required" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -56,12 +113,25 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Accept invite action ──
+    // ── Accept invite action (public; secured by single-use token) ──
     if (action === "accept") {
       const { token, password } = body;
-      if (!token || !password) {
+      if (!token || typeof token !== "string") {
         return new Response(
-          JSON.stringify({ error: "token and password are required" }),
+          JSON.stringify({ error: "token is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      // Server-side password validation — never trust the client.
+      if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+        return new Response(
+          JSON.stringify({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (password.length > 256) {
+        return new Response(
+          JSON.stringify({ error: "Password is too long" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -117,28 +187,29 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Send invite action (default) ──
-    const { client_id, invited_by_user_id } = body;
+    // ── Send invite action (PRIVILEGED — admin only) ──
+    // CRITICAL: This path can create auth users and reset passwords (via the accept flow).
+    // It MUST be protected against unauthenticated access.
+    const adminCheck = await requireAdminCaller(req);
+    if (adminCheck) return adminCheck;
 
-    if (!client_id) {
+    const { client_id, invited_by_user_id, client_email, client_name } = body;
+
+    if (!client_id || typeof client_id !== "string") {
       return new Response(
         JSON.stringify({ error: "client_id is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // We need to fetch client from the EXTERNAL supabase
-    // For now, client info is passed from the frontend
-    const { client_email, client_name } = body;
-
-    if (!client_email) {
+    if (!client_email || typeof client_email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client_email)) {
       return new Response(
-        JSON.stringify({ error: "client_email is required" }),
+        JSON.stringify({ error: "valid client_email is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Create auth user with temp password
+    // Create auth user with temp password (only used until invitee sets their own).
     const tempPassword = crypto.randomUUID();
     const { error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: client_email,
@@ -184,7 +255,7 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: err.message || "Internal server error" }),
+      JSON.stringify({ error: (err as Error).message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
