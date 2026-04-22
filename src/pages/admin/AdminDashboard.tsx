@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
@@ -17,11 +20,29 @@ const AdminDashboard = () => {
   const { data: reports = [] } = useReports();
   const { data: activityEvents = [] } = useAutomationEvents();
   const { data: zoho } = useZohoMetrics();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("enquiries-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "intake_submissions" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["intake_submissions"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const activeClients = clients.filter((c) => c.status === "active").length;
   const activeProjects = projects.length;
   const websitesInProgress = projects.filter((p) => p.stage !== "completed" && p.stage !== "live").length;
-  const openEnquiries = enquiries.filter((e) => e.status !== "converted").length;
+  const openEnquiries = enquiries.filter((e) => e.status === "new").length;
   const openSupport = tasks.filter((t) => t.status !== "closed").length;
   const pendingReports = reports.filter((r) => r.status !== "completed").length;
 
