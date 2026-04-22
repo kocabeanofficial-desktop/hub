@@ -540,6 +540,31 @@ const ClientFormDialog = ({ open, onOpenChange, form, updateField, onSave, savin
           <Label htmlFor="business_name">Name *</Label>
           <Input id="business_name" value={form.business_name} onChange={(e) => updateField("business_name", e.target.value)} placeholder="e.g. Acme Holdings" />
         </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="status">Status *</Label>
+          <Select value={form.status} onValueChange={(v) => updateField("status", v)}>
+            <SelectTrigger id="status">
+              <SelectValue placeholder="Select status">
+                {form.status && (
+                  <span className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${STATUS_OPTIONS.find((s) => s.value === form.status)?.dot || "bg-muted"}`} />
+                    {STATUS_OPTIONS.find((s) => s.value === form.status)?.label || form.status}
+                  </span>
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  <span className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${opt.dot}`} />
+                    {opt.label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="email">Email</Label>
