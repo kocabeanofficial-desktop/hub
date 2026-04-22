@@ -118,12 +118,24 @@ const Clients = () => {
     }
     setSendingInvite(client.id);
     try {
+      // Pass the admin's external-Supabase access token so the edge function can verify
+      // the caller is an active super_admin before issuing/resetting credentials.
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        toast({ title: "Not signed in", description: "Please sign in again to send invites.", variant: "destructive" });
+        setSendingInvite(null);
+        return;
+      }
       const { data, error: fnError } = await supabaseCloud.functions.invoke("send-client-invite", {
         body: {
           client_id: client.id,
           client_email: client.email,
           client_name: client.business_name,
           invited_by_user_id: user?.id || null,
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
         },
       });
       if (fnError || (data && data.error)) {
