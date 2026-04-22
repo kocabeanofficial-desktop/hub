@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
-import { supabaseCloud } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import {
   FileText,
   UploadCloud,
@@ -160,28 +160,34 @@ export const PdfInvoiceUpload = () => {
     if (!file || !canSave) return;
     setSaving(true);
     try {
-      const { data: { user } } = await supabaseCloud.auth.getUser();
-      const { data: { session } } = await supabaseCloud.auth.getSession();
-      if (!user || !session) {
-        // Fall back: storage RLS requires Cloud auth; if user only has external session, this won't work.
-        throw new Error("You must be signed in to Lovable Cloud to save invoices.");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("You must be signed in to save invoices.");
       }
 
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${user.id}/${Date.now()}_${safeName}`;
+      const timestamp = Date.now();
+      const safeInvoice = invoiceNumber.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+      const filePath = `${user.id}/invoice-${safeInvoice}-${timestamp}.pdf`;
 
-      const { error: uploadError } = await supabaseCloud.storage
+      const { error: uploadError } = await supabase.storage
         .from("invoice-pdfs")
-        .upload(path, file, { contentType: "application/pdf", upsert: false });
+        .upload(filePath, file, { contentType: "application/pdf", upsert: false });
       if (uploadError) throw uploadError;
 
-      const { data: signed } = await supabaseCloud.storage
+      const { data: urlData, error: urlError } = await supabase.storage
         .from("invoice-pdfs")
-        .createSignedUrl(path, 60 * 60 * 24 * 365);
+        .createSignedUrl(filePath, 31536000); // 1 year
+      if (urlError) throw urlError;
 
-      const pdf_url = signed?.signedUrl ?? path;
+      const pdfUrl = urlData?.signedUrl ?? filePath;
 
-      const { error: insertError } = await supabaseCloud
+      // manual_invoices lives in the external Supabase project and isn't in the
+      // generated types, so cast through the from() string.
+      const { error: insertError } = await (supabase as unknown as {
+        from: (table: string) => {
+          insert: (row: Record<string, unknown>) => Promise<{ error: unknown }>;
+        };
+      })
         .from("manual_invoices")
         .insert({
           invoice_number: invoiceNumber.trim(),
@@ -189,10 +195,13 @@ export const PdfInvoiceUpload = () => {
           due_date: dueDate || null,
           amount_due: Number.parseFloat(amountDue),
           customer_name: customerName.trim() || null,
-          pdf_url,
+          pdf_url: pdfUrl,
           uploaded_by: user.id,
         });
-      if (insertError) throw insertError;
+      if (insertError) {
+        const msg = insertError instanceof Error ? insertError.message : "Insert failed";
+        throw new Error(msg);
+      }
 
       toast({
         title: "Invoice saved",
