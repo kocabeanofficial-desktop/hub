@@ -21,7 +21,7 @@ const AdminDashboard = () => {
   const activeClients = clients.filter((c) => c.status === "active").length;
   const activeProjects = projects.length;
   const websitesInProgress = projects.filter((p) => p.stage !== "completed" && p.stage !== "live").length;
-  const openEnquiries = enquiries.filter((e) => e.status !== "converted").length;
+  const openEnquiries = enquiries.filter((e) => e.status === "new").length;
   const openSupport = tasks.filter((t) => t.status !== "closed").length;
   const pendingReports = reports.filter((r) => r.status !== "completed").length;
 
