@@ -1,8 +1,10 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Globe, Mail, Phone, Building2 } from "lucide-react";
+import { ArrowLeft, Globe, Mail, Phone, Building2, ArrowRight } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { useClient } from "@/hooks/useClients";
+import { useWebsitesByClient } from "@/hooks/useWebsites";
 
 const ClientDetail = () => {
   const { clientId } = useParams<{ clientId: string }>();
