@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Enquiries from "./pages/admin/Enquiries";
 import Clients from "./pages/admin/Clients";
+import ClientDetail from "./pages/admin/ClientDetail";
 import Projects from "./pages/admin/Projects";
 import Support from "./pages/admin/Support";
 import SEOTracking from "./pages/admin/SEOTracking";
@@ -82,6 +83,7 @@ const App: React.FC = () => (
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/enquiries" element={<ProtectedRoute role="admin"><Enquiries /></ProtectedRoute>} />
             <Route path="/admin/clients" element={<ProtectedRoute role="admin"><Clients /></ProtectedRoute>} />
+            <Route path="/admin/clients/:clientId" element={<ProtectedRoute role="admin"><ClientDetail /></ProtectedRoute>} />
             <Route path="/admin/projects" element={<ProtectedRoute role="admin"><Projects /></ProtectedRoute>} />
             <Route path="/admin/projects/:projectId" element={<ProtectedRoute role="admin"><Projects /></ProtectedRoute>} />
             <Route path="/admin/support" element={<ProtectedRoute role="admin"><Support /></ProtectedRoute>} />
