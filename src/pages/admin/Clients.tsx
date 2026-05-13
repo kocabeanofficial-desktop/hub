@@ -455,8 +455,10 @@ const Clients = () => {
               <tbody className="divide-y divide-border">
                 {filtered.map((client) => (
                   <tr key={client.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3.5 cursor-pointer" onClick={() => setSelected(client.id)}>
-                      <p className="font-medium text-foreground">{client.business_name}</p>
+                    <td className="px-4 py-3.5">
+                      <Link to={`/admin/clients/${client.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
+                        {client.business_name}
+                      </Link>
                     </td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{client.email || "—"}</td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{client.phone || "—"}</td>
