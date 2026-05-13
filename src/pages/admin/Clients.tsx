@@ -471,6 +471,12 @@ const Clients = () => {
                     <td className="px-4 py-3.5"><StatusBadge status={client.status} /></td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1">
+                        <Link
+                          to={`/admin/clients/${client.id}`}
+                          className="px-2.5 py-1 rounded-lg text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                        >
+                          View
+                        </Link>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleSendInvite(client); }}
                           disabled={sendingInvite === client.id || !client.email}
