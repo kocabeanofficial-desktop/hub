@@ -1,12 +1,15 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Globe, Mail, Phone, Building2 } from "lucide-react";
+import { ArrowLeft, Globe, Mail, Phone, Building2, ArrowRight } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { useClient } from "@/hooks/useClients";
+import { useWebsitesByClient } from "@/hooks/useWebsites";
 
 const ClientDetail = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const { data: client, isLoading, isError } = useClient(clientId);
+  const { data: websites = [], isLoading: websitesLoading } = useWebsitesByClient(clientId);
 
   return (
     <DashboardLayout>
@@ -90,24 +93,76 @@ const ClientDetail = () => {
               </div>
             </div>
 
-            {/* Linked websites placeholder */}
+            {/* Linked websites */}
             <section className="rounded-xl border border-border bg-card p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-heading font-semibold text-foreground">
                   Linked Websites
                 </h2>
               </div>
-              <div className="rounded-lg border border-dashed border-border p-8 text-center">
-                <Globe className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm font-medium text-foreground">
-                  No linked websites yet
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-                  Website content management isn't connected to this dashboard yet.
-                  Once a websites table and content editor are added, linked websites
-                  for this client will appear here.
-                </p>
-              </div>
+
+              {websitesLoading && (
+                <div className="text-sm text-muted-foreground">Loading websites…</div>
+              )}
+
+              {!websitesLoading && websites.length === 0 && (
+                <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                  <Globe className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm font-medium text-foreground">
+                    No linked websites yet
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Websites linked to this client will appear here.
+                  </p>
+                </div>
+              )}
+
+              {!websitesLoading && websites.length > 0 && (
+                <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+                  {websites.map((w) => (
+                    <li
+                      key={w.id}
+                      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {w.name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-xs text-muted-foreground truncate">
+                              {w.domain || "—"}
+                            </p>
+                            {w.platform && (
+                              <span className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground">
+                                · {w.platform}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span
+                          className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                            w.is_active
+                              ? "bg-success/15 text-success"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {w.is_active ? "Active" : "Inactive"}
+                        </span>
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={`/admin/websites/${w.id}/content`}>
+                            Manage Website Content
+                            <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
           </>
         )}

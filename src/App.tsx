@@ -17,6 +17,8 @@ import TaskManager from "./pages/admin/TaskManager";
 import Hosting from "./pages/admin/Hosting";
 import ZohoImports from "./pages/admin/ZohoImports";
 import ActivityLog from "./pages/admin/ActivityLog";
+import WebsiteContent from "./pages/admin/WebsiteContent";
+import PageContentEditor from "./pages/admin/PageContentEditor";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientProjects from "./pages/client/ClientProjects";
 import ClientSupport from "./pages/client/ClientSupport";
@@ -93,6 +95,8 @@ const App: React.FC = () => (
             <Route path="/admin/hosting" element={<ProtectedRoute role="admin"><Hosting /></ProtectedRoute>} />
             <Route path="/admin/imports" element={<ProtectedRoute role="admin"><ZohoImports /></ProtectedRoute>} />
             <Route path="/admin/activity" element={<ProtectedRoute role="admin"><ActivityLog /></ProtectedRoute>} />
+            <Route path="/admin/websites/:websiteId/content" element={<ProtectedRoute role="admin"><WebsiteContent /></ProtectedRoute>} />
+            <Route path="/admin/websites/:websiteId/content/:pageId" element={<ProtectedRoute role="admin"><PageContentEditor /></ProtectedRoute>} />
             {/* Client routes */}
             <Route path="/client" element={<ProtectedRoute role="client"><ClientDashboard /></ProtectedRoute>} />
             <Route path="/client/projects" element={<ProtectedRoute role="client"><ClientProjects /></ProtectedRoute>} />
