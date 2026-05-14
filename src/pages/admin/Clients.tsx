@@ -4,7 +4,7 @@ import { useClients, useProjects, useTasks, useReports, useContacts } from "@/ho
 import { useState, useEffect, useMemo } from "react";
 import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2, Send, BarChart3, ArrowUpDown, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { supabase, supabaseCloud } from "@/integrations/supabase/client";
+import { supabase, supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -224,7 +224,7 @@ const Clients = () => {
         setSendingInvite(null);
         return;
       }
-      const { data, error: fnError } = await supabaseCloud.functions.invoke("send-client-invite", {
+      const { data, error: fnError } = await supabase.functions.invoke("send-client-invite", {
         body: {
           client_id: client.id,
           client_email: client.email,

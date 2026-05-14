@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { supabaseCloud } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +27,7 @@ const AcceptInvite = () => {
     }
 
     const checkToken = async () => {
-      const { data, error } = await supabaseCloud.functions.invoke("send-client-invite", {
+      const { data, error } = await supabase.functions.invoke("send-client-invite", {
         body: { action: "validate", token },
       });
 
@@ -59,7 +59,7 @@ const AcceptInvite = () => {
     setStatus("submitting");
 
     try {
-      const { data, error: fnError } = await supabaseCloud.functions.invoke("send-client-invite", {
+      const { data, error: fnError } = await supabase.functions.invoke("send-client-invite", {
         body: { action: "accept", token, password },
       });
 
@@ -74,7 +74,7 @@ const AcceptInvite = () => {
 
       // Sign in with the new password
       if (invite) {
-        const { error: signInError } = await supabaseCloud.auth.signInWithPassword({
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email: invite.email,
           password,
         });
