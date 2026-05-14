@@ -21,7 +21,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { supabaseCloud } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Loader2, Inbox } from "lucide-react";
@@ -156,7 +156,7 @@ function useTickets() {
   return useQuery<SupportTicket[]>({
     queryKey: ["cloud_support_tickets"],
     queryFn: async () => {
-      const { data, error } = await supabaseCloud
+      const { data, error } = await supabase
         .from("support_tickets")
         .select("*")
         .order("created_at", { ascending: false });
@@ -170,7 +170,7 @@ function useStaffAuths() {
   return useQuery<StaffAuth[]>({
     queryKey: ["cloud_staff_authorizations"],
     queryFn: async () => {
-      const { data, error } = await supabaseCloud
+      const { data, error } = await supabase
         .from("staff_authorizations")
         .select("*")
         .order("created_at", { ascending: false });
@@ -184,7 +184,7 @@ function useUpgrades() {
   return useQuery<UpgradeRequest[]>({
     queryKey: ["cloud_upgrade_requests"],
     queryFn: async () => {
-      const { data, error } = await supabaseCloud
+      const { data, error } = await supabase
         .from("upgrade_requests")
         .select("*")
         .order("created_at", { ascending: false });
@@ -198,7 +198,7 @@ function useWhmAlerts() {
   return useQuery<WhmAlert[]>({
     queryKey: ["cloud_whm_alerts"],
     queryFn: async () => {
-      const { data, error } = await supabaseCloud
+      const { data, error } = await supabase
         .from("whm_quota_checks")
         .select("*")
         .or("is_over_80.eq.true,is_suspended.eq.true")
@@ -227,7 +227,7 @@ function TicketsTab() {
   const save = async () => {
     if (!selected) return;
     setSaving(true);
-    const { error } = await supabaseCloud
+    const { error } = await supabase
       .from("support_tickets")
       .update({ status: editStatus, resolution_notes: editNotes, updated_at: new Date().toISOString() })
       .eq("id", selected.id);
@@ -326,7 +326,7 @@ function StaffAccessTab() {
 
   const updateStatus = async (id: string, status: string) => {
     setSaving(true);
-    const { error } = await supabaseCloud.from("staff_authorizations").update({ status }).eq("id", id);
+    const { error } = await supabase.from("staff_authorizations").update({ status }).eq("id", id);
     setSaving(false);
     if (error) { toast.error("Failed to update"); return; }
     toast.success("Updated");
@@ -435,7 +435,7 @@ function UpgradesTab() {
     setSaving(true);
     // We'll store quoted_amount and internal_notes as part of a future column extension.
     // For now update status only since those columns don't exist yet.
-    const { error } = await supabaseCloud
+    const { error } = await supabase
       .from("upgrade_requests")
       .update({ status: editStatus })
       .eq("id", selected.id);

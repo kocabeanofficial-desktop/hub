@@ -20,7 +20,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabaseCloud } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const WHATSAPP_NUMBER = "27600000000"; // replace with real number
@@ -67,7 +67,7 @@ function EmailModal({
     setLoading(true);
 
     const domain = email.split("@")[1] || "";
-    const { error } = await supabaseCloud.from("email_settings_requests").insert({
+    const { error } = await supabase.from("email_settings_requests").insert({
       client_id: user?.clientId || user?.id || "",
       requesting_name:
         user?.name || "Client",
@@ -157,7 +157,7 @@ function StaffModal({
     if (!form.staff_full_name || !form.staff_email) return;
     setLoading(true);
 
-    const { error } = await supabaseCloud.from("staff_authorizations").insert({
+    const { error } = await supabase.from("staff_authorizations").insert({
       client_id: user?.clientId || user?.id || "",
       owner_name: user?.name || "Client",
       owner_email: user?.email || "",
@@ -295,7 +295,7 @@ function UpgradeModal({
     if (!form.business_description) return;
     setLoading(true);
 
-    const { error } = await supabaseCloud.from("upgrade_requests").insert({
+    const { error } = await supabase.from("upgrade_requests").insert({
       client_id: user?.clientId || user?.id || "",
       submitter_name: user?.name || "Client",
       submitter_email: user?.email || "",
