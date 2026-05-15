@@ -28,9 +28,7 @@ const AcceptInvite = () => {
     }
 
     const checkToken = async () => {
-      const { data, error } = await supabase.functions.invoke("send-client-invite", {
-        body: { action: "validate", token },
-      });
+      const { data, error } = await callInviteFunction({ action: "validate", token });
 
       if (error || !data?.valid) {
         setStatus("invalid");
