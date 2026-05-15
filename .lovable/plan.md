@@ -1,45 +1,52 @@
 ## Goal
 
-Make the client portal actually work. Right now `AppUser.clientId` is never populated, so `ClientDashboard`, `ClientProjects`, `ClientReports`, and `ClientSupport` always render with `clientId === undefined` and show no data.
+Make the "Send Invite" button create the client auth user and `client_invites` row in the **external Koca Supabase project** (`yxccaoiznqklgnxdsdlr`) instead of Lovable Cloud, using the newly added `EXTERNAL_SUPABASE_SERVICE_ROLE_KEY`. Keep all admin checks strict.
 
-## Fix 1 — AuthContext: resolve `clientId` for client users
+## Root cause of current failure
 
-In `src/contexts/AuthContext.tsx`, extend `resolveAppUser` so that when the user is not an admin:
+`supabase/functions/send-client-invite/index.ts` uses two clients:
+- `externalClient` / `lookupClient` → external project (admin verification only)
+- `supabaseAdmin` (built from `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`) → **Lovable Cloud**, used for `auth.admin.createUser`, `client_invites` insert, and accept/validate flows.
 
-1. Try `supaUser.user_metadata.client_id` first. The `send-client-invite` accept flow sets this on `auth.users` metadata, so most client users will have it.
-2. If missing, look it up by email:
-   ```ts
-   supabase.from("clients").select("id").eq("email", supaUser.email).maybeSingle()
-   ```
-3. Return `{ role: "client", clientId }`. If no `clientId` can be resolved, still return the user but with `clientId` undefined and surface a friendly `authError` like "Your account isn't linked to a client yet — please contact support." Keep the user signed in so they see the message instead of a blank screen.
-4. Wrap the new lookup in the existing `withTimeout` helper so a hung query doesn't freeze auth.
+Result: auth users are created in Lovable Cloud (where the admin doesn't exist) and `client_invites.invited_by` FK points at Lovable Cloud `auth.users`. Hence the FK violation we patched with `null`, and invites that don't actually land in the external project where the rest of the business data lives.
 
-No schema changes needed — `clients.email` already exists.
+## Changes
 
-## Fix 2 — Client dashboard frontend pass
+### 1. `supabase/functions/send-client-invite/index.ts`
 
-While `clientId` is wired, polish the client-facing pages so the portal feels finished:
+- Add a single `externalAdmin` client built from:
+  ```ts
+  createClient(EXTERNAL_SUPABASE_URL, Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } })
+  ```
+  Fail fast with a 500 + clear log if the env var is missing.
+- Replace **all** uses of `supabaseAdmin` with `externalAdmin` for:
+  - `validate` action: `client_invites` lookup
+  - `accept` action: `client_invites` lookup, `auth.admin.listUsers` / `updateUserById` / `createUser`, `client_invites` update
+  - `send` action: `auth.admin.createUser` (with `user_metadata.client_id`), `client_invites` insert
+- In the `send` branch, use `invited_by: invited_by_user_id || null`. Since the caller's verified admin id (`userRes.user.id`) now belongs to the external project, refactor `requireAdminCaller` to also **return** the verified admin user id and use it as `invited_by` instead of `null`.
+- Remove the Lovable Cloud `supabaseAdmin` entirely. No more `Deno.env.get("SUPABASE_URL")` / `SUPABASE_SERVICE_ROLE_KEY` usage in this function.
+- Keep admin verification exactly as today: bearer token required, `admin_users` row must exist, `is_active === true`, `role === "super_admin"`.
+- Keep server-side password validation, CORS, and generic error messages on the wire (detailed logs server-side).
 
-- **`ClientDashboard`** — show greeting with `user.name`, KPI cards (active projects, open tasks, latest report date), and quick links into Projects / Reports / Support. Empty states for each section.
-- **`ClientProjects`** — list view with status badge, last update, and a detail drawer or expandable row. Empty state.
-- **`ClientReports`** — chronological list grouped by month; each item links/downloads the report. Empty state.
-- **`ClientSupport`** — keep the four "Need help?" actions (email settings, add staff, upgrade website, chat). Confirm forms write to `email_settings_requests`, `staff_authorizations`, `upgrade_requests` per the existing memory.
-- Shared: a `ClientLayout` (or reuse DashboardLayout in client mode) with sidebar nav: Dashboard, Projects, Reports, Support, plus sign-out.
-- Loading skeletons and a single "no client linked yet" state shown across all pages when `clientId` is missing.
+### 2. `src/pages/admin/Clients.tsx`
 
-## Out of scope
+- `handleSendInvite` already surfaces `data?.error || fnError?.message`. Tighten it so the user sees the real backend reason:
+  - Concatenate `data?.reason` when present (e.g. `"Forbidden: admin role required (no_row)"`).
+  - If both are missing, fall back to `"Invite failed (no details)"` instead of the generic Supabase string.
+- Now that `invited_by` will be the external admin id, change the call site to pass `invited_by_user_id: user?.id ?? null` again (the FK violation is gone because we're inserting into the external project).
 
-- No edits to `send-client-invite` or its secrets (per your instruction).
-- No DB migrations.
-- No changes to admin pages.
+### 3. No DB migrations, no RLS changes, no schema changes.
 
-## Files expected to change
+`admin_users` stays private. `client_invites` RLS is unchanged. Nothing in Lovable Cloud is touched beyond reading `EXTERNAL_SUPABASE_SERVICE_ROLE_KEY`.
 
-- `src/contexts/AuthContext.tsx` — resolve `clientId`.
-- `src/pages/client/ClientDashboard.tsx`, `ClientProjects.tsx`, `ClientReports.tsx`, `ClientSupport.tsx` — frontend polish + empty/loading states.
-- Possibly a new `src/components/layout/ClientLayout.tsx` if DashboardLayout doesn't already adapt.
-- Possibly small additions to `src/hooks/useClientData.ts` (or wherever `useClientProjects` etc. live) for typing/empty handling — read-only behavior only.
+## Test plan (one run only)
 
-## Open question
+After deploy, click **Send Invite** on Smartlook (`b486d456-…`, `kocabeantester@smartlook.co.za`, "KocaBeanTester"). Then verify via `supabase--read_query` against the external project equivalents:
+1. New row in external `auth.users` for that email with `user_metadata.client_id = b486d456-…`
+2. New row in external `client_invites` with matching `client_id`, `email`, `status='pending'`, `invited_by` = admin's external user id, valid `token`
+3. Toast in UI shows "Invite sent" with the link `…/accept-invite?token=…`
+4. Do **not** trigger the accept flow.
 
-Do you want the existing `DashboardLayout` reused for the client portal (with a different nav set when `user.role === "client"`), or a separate `ClientLayout` component? I'll default to reusing `DashboardLayout` with role-based nav unless you prefer otherwise.
+## Report after implementation
+
+Will return: files changed, confirmed root cause, env-var usage confirmation, auth user creation result, `client_invites` row result, generated invite link, and any remaining errors.

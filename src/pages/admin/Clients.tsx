@@ -230,15 +230,19 @@ const Clients = () => {
           client_id: client.id,
           client_email: client.email,
           client_name: client.business_name,
-          // FK on client_invites.invited_by points to Lovable Cloud auth.users,
-          // but admins authenticate against the external project. Pass null to
-          // avoid foreign key violation.
+          // Edge function now derives invited_by from the verified admin token
+          // (external project), so no client-side id is needed.
           invited_by_user_id: null,
         },
         accessToken,
       );
       if (fnError || (data && data.error)) {
-        toast({ title: "Invite failed", description: data?.error || fnError?.message || "Unknown error", variant: "destructive" });
+        const reason = data?.reason ? ` (${data.reason})` : "";
+        const description =
+          (data?.error ? data.error + reason : null) ||
+          fnError?.message ||
+          "Invite failed (no details)";
+        toast({ title: "Invite failed", description, variant: "destructive" });
       } else {
         toast({ title: "Invite sent", description: `Invite sent to ${client.email}` });
       }
