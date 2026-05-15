@@ -44,7 +44,6 @@ const ClientWebsite = () => {
     if (!website || !homepage) return;
     const payloads = fields.map((f) => ({
       website_id: website.id,
-      page_id: homepage.id,
       field_id: f.id,
       value: draft[f.id] ?? "",
       updated_by: user?.id ?? null,
