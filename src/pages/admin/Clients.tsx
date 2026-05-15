@@ -1,6 +1,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useClients, useProjects, useTasks, useReports, useContacts } from "@/hooks/useSupabaseData";
+import { callInviteFunction } from "@/lib/inviteFunction";
 import { useState, useEffect, useMemo } from "react";
 import { Search, ArrowRight, Plus, Pencil, AlertCircle, Loader2, Send, BarChart3, ArrowUpDown, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
