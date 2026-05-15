@@ -58,9 +58,7 @@ const AcceptInvite = () => {
     setStatus("submitting");
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("send-client-invite", {
-        body: { action: "accept", token, password },
-      });
+      const { data, error: fnError } = await callInviteFunction({ action: "accept", token, password });
 
       if (fnError || (data && data.error)) {
         setError(data?.error || fnError?.message || "Failed to set up account.");
