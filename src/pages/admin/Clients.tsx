@@ -232,7 +232,7 @@ const Clients = () => {
           client_name: client.business_name,
           // Edge function now derives invited_by from the verified admin token
           // (external project), so no client-side id is needed.
-          invited_by_user_id: null,
+          action: "send",
         },
         accessToken,
       );
@@ -241,7 +241,7 @@ const Clients = () => {
         const description =
           (data?.error ? data.error + reason : null) ||
           fnError?.message ||
-          "Invite failed (no details)";
+          "Invite failed — no details returned";
         toast({ title: "Invite failed", description, variant: "destructive" });
       } else {
         toast({ title: "Invite sent", description: `Invite sent to ${client.email}` });
