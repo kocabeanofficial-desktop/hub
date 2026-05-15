@@ -21,6 +21,7 @@ import WebsiteContent from "./pages/admin/WebsiteContent";
 import PageContentEditor from "./pages/admin/PageContentEditor";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientProjects from "./pages/client/ClientProjects";
+import ClientWebsite from "./pages/client/ClientWebsite";
 import ClientSupport from "./pages/client/ClientSupport";
 import ClientReports from "./pages/client/ClientReports";
 import AcceptInvite from "./pages/AcceptInvite";
@@ -100,6 +101,7 @@ const App: React.FC = () => (
             {/* Client routes — accessible to any authenticated user (admins included for testing) */}
             <Route path="/client" element={<ProtectedRoute><ClientDashboard /></ProtectedRoute>} />
             <Route path="/client/projects" element={<ProtectedRoute><ClientProjects /></ProtectedRoute>} />
+            <Route path="/client/website" element={<ProtectedRoute><ClientWebsite /></ProtectedRoute>} />
             <Route path="/client/support" element={<ProtectedRoute><ClientSupport /></ProtectedRoute>} />
             <Route path="/client/reports" element={<ProtectedRoute><ClientReports /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

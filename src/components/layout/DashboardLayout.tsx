@@ -24,7 +24,7 @@ const adminNav = [
 
 const clientNav = [
   { label: "Dashboard", path: "/client", icon: LayoutDashboard },
-  { label: "Projects", path: "/client/projects", icon: FolderOpen },
+  { label: "Website", path: "/client/website", icon: FolderOpen },
   { label: "Support", path: "/client/support", icon: MessageSquare },
   { label: "Reports", path: "/client/reports", icon: FileText },
 ];
