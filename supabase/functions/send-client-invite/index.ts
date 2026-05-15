@@ -6,57 +6,59 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// External Supabase project (where admin_users table and admin auth live).
-// These are publishable values, safe to embed.
+// External Supabase project (Koca) — single source of truth for auth, admin_users,
+// clients, client_invites, etc. Lovable Cloud is not used for any data here.
 const EXTERNAL_SUPABASE_URL = "https://yxccaoiznqklgnxdsdlr.supabase.co";
 const EXTERNAL_SUPABASE_ANON_KEY = "sb_publishable_0uD0yzrWL6uBDjzQCEBpcg_t80Sj2ng";
 
 const MIN_PASSWORD_LENGTH = 8;
 
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function getExternalAdmin() {
+  const serviceKey = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceKey) {
+    console.error("[config] EXTERNAL_SUPABASE_SERVICE_ROLE_KEY is not set");
+    return null;
+  }
+  return createClient(EXTERNAL_SUPABASE_URL, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 /**
  * Validates that the caller is an authenticated active super_admin in the EXTERNAL Supabase project.
- * Returns null on success, or a Response on failure (to be returned directly to the client).
+ * Returns the verified admin user id on success, or a Response on failure.
  */
-async function requireAdminCaller(req: Request): Promise<Response | null> {
+async function requireAdminCaller(
+  req: Request,
+  externalAdmin: ReturnType<typeof createClient>,
+): Promise<{ adminUserId: string } | Response> {
   const authHeader = req.headers.get("Authorization") || req.headers.get("authorization");
   if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized: missing bearer token" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Unauthorized: missing bearer token" }, 401);
   }
   const token = authHeader.slice("bearer ".length).trim();
 
-  // Verify the token against the EXTERNAL Supabase auth (where admins authenticate).
-  const externalClient = createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
+  // Verify token against the external auth.
+  const externalAuth = createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-
-  const { data: userRes, error: userErr } = await externalClient.auth.getUser(token);
+  const { data: userRes, error: userErr } = await externalAuth.auth.getUser(token);
   if (userErr || !userRes?.user) {
     console.warn("[admin-auth] invalid external session", { msg: userErr?.message });
-    return new Response(
-      JSON.stringify({ error: "Unauthorized: invalid session" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Unauthorized: invalid session" }, 401);
   }
 
   const userId = userRes.user.id;
   const userEmail = userRes.user.email ?? null;
 
-  // Look up admin_users on the EXTERNAL project. Prefer a service-role key if
-  // configured (RLS-independent); otherwise fall back to a JWT-scoped client.
-  const externalServiceKey = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY");
-  const lookupClient = externalServiceKey
-    ? createClient(EXTERNAL_SUPABASE_URL, externalServiceKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      })
-    : createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      });
-
-  const { data: adminRow, error: adminErr } = await lookupClient
+  const { data: adminRow, error: adminErr } = await externalAdmin
     .from("admin_users")
     .select("role, is_active")
     .eq("user_id", userId)
@@ -64,29 +66,20 @@ async function requireAdminCaller(req: Request): Promise<Response | null> {
 
   if (adminErr) {
     console.error("[admin-auth] admin_users lookup error", {
-      userId, userEmail, usingServiceKey: !!externalServiceKey, msg: adminErr.message, code: (adminErr as any).code,
+      userId, userEmail, msg: adminErr.message, code: (adminErr as any).code,
     });
-    return new Response(
-      JSON.stringify({ error: "Forbidden: admin role required", reason: "lookup_error" }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Forbidden: admin role required", reason: "lookup_error" }, 403);
   }
   if (!adminRow) {
-    console.warn("[admin-auth] no admin_users row", { userId, userEmail, usingServiceKey: !!externalServiceKey });
-    return new Response(
-      JSON.stringify({ error: "Forbidden: admin role required", reason: "no_row" }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.warn("[admin-auth] no admin_users row", { userId, userEmail });
+    return jsonResponse({ error: "Forbidden: admin role required", reason: "no_row" }, 403);
   }
-  if (adminRow.is_active !== true || adminRow.role !== "super_admin") {
-    console.warn("[admin-auth] role/active mismatch", { userId, userEmail, role: adminRow.role, is_active: adminRow.is_active });
-    return new Response(
-      JSON.stringify({ error: "Forbidden: admin role required", reason: "role_mismatch" }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if ((adminRow as any).is_active !== true || (adminRow as any).role !== "super_admin") {
+    console.warn("[admin-auth] role/active mismatch", { userId, userEmail, ...(adminRow as any) });
+    return jsonResponse({ error: "Forbidden: admin role required", reason: "role_mismatch" }, 403);
   }
 
-  return null;
+  return { adminUserId: userId };
 }
 
 Deno.serve(async (req) => {
@@ -95,197 +88,142 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const externalAdmin = getExternalAdmin();
+    if (!externalAdmin) {
+      return jsonResponse({ error: "Server misconfigured: EXTERNAL_SUPABASE_SERVICE_ROLE_KEY missing" }, 500);
+    }
+
     const body = await req.json();
     const { action } = body;
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // ── Validate token action (public, no auth needed) ──
+    // ── Validate token (public) ──
     if (action === "validate") {
       const { token } = body;
       if (!token || typeof token !== "string") {
-        return new Response(
-          JSON.stringify({ error: "token is required" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: "token is required" }, 400);
       }
 
-      const { data: invite, error: inviteErr } = await supabaseAdmin
+      const { data: invite, error: inviteErr } = await externalAdmin
         .from("client_invites")
         .select("id, email, client_id, status, expires_at")
         .eq("token", token)
         .single();
 
-      if (inviteErr || !invite) {
-        return new Response(
-          JSON.stringify({ valid: false }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (inviteErr || !invite) return jsonResponse({ valid: false });
+      if ((invite as any).status !== "pending" || new Date((invite as any).expires_at) < new Date()) {
+        return jsonResponse({ valid: false });
       }
-
-      if (invite.status !== "pending" || new Date(invite.expires_at) < new Date()) {
-        return new Response(
-          JSON.stringify({ valid: false }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ valid: true, email: invite.email, client_id: invite.client_id, id: invite.id }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({
+        valid: true,
+        email: (invite as any).email,
+        client_id: (invite as any).client_id,
+        id: (invite as any).id,
+      });
     }
 
-    // ── Accept invite action (public; secured by single-use token) ──
+    // ── Accept invite (public; secured by single-use token) ──
     if (action === "accept") {
       const { token, password } = body;
       if (!token || typeof token !== "string") {
-        return new Response(
-          JSON.stringify({ error: "token is required" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: "token is required" }, 400);
       }
-      // Server-side password validation — never trust the client.
       if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
-        return new Response(
-          JSON.stringify({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, 400);
       }
       if (password.length > 256) {
-        return new Response(
-          JSON.stringify({ error: "Password is too long" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: "Password is too long" }, 400);
       }
 
-      const { data: invite, error: inviteErr } = await supabaseAdmin
+      const { data: invite, error: inviteErr } = await externalAdmin
         .from("client_invites")
         .select("*")
         .eq("token", token)
         .single();
 
-      if (inviteErr || !invite) {
-        return new Response(
-          JSON.stringify({ error: "Invite not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (inviteErr || !invite) return jsonResponse({ error: "Invite not found" }, 404);
+      if ((invite as any).status !== "pending" || new Date((invite as any).expires_at) < new Date()) {
+        return jsonResponse({ error: "Invite expired or already used" }, 400);
       }
 
-      if (invite.status !== "pending" || new Date(invite.expires_at) < new Date()) {
-        return new Response(
-          JSON.stringify({ error: "Invite expired or already used" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-      const authUser = users?.users?.find((u: any) => u.email === invite.email);
+      const { data: users } = await (externalAdmin as any).auth.admin.listUsers();
+      const authUser = users?.users?.find((u: any) => u.email === (invite as any).email);
 
       if (authUser) {
-        await supabaseAdmin.auth.admin.updateUserById(authUser.id, { password });
+        await (externalAdmin as any).auth.admin.updateUserById(authUser.id, {
+          password,
+          user_metadata: { ...(authUser.user_metadata || {}), client_id: (invite as any).client_id },
+        });
       } else {
-        const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
-          email: invite.email,
+        const { error: createErr } = await (externalAdmin as any).auth.admin.createUser({
+          email: (invite as any).email,
           password,
           email_confirm: true,
-          user_metadata: { client_id: invite.client_id },
+          user_metadata: { client_id: (invite as any).client_id },
         });
-        if (createErr) {
-          return new Response(
-            JSON.stringify({ error: createErr.message }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
+        if (createErr) return jsonResponse({ error: createErr.message }, 400);
       }
 
-      await supabaseAdmin
+      await externalAdmin
         .from("client_invites")
         .update({ status: "accepted", accepted_at: new Date().toISOString() })
-        .eq("id", invite.id);
+        .eq("id", (invite as any).id);
 
-      return new Response(
-        JSON.stringify({ success: true }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ success: true });
     }
 
-    // ── Send invite action (PRIVILEGED — admin only) ──
-    // CRITICAL: This path can create auth users and reset passwords (via the accept flow).
-    // It MUST be protected against unauthenticated access.
-    const adminCheck = await requireAdminCaller(req);
-    if (adminCheck) return adminCheck;
+    // ── Send invite (PRIVILEGED — admin only) ──
+    const adminCheck = await requireAdminCaller(req, externalAdmin);
+    if (adminCheck instanceof Response) return adminCheck;
+    const { adminUserId } = adminCheck;
 
-    const { client_id, invited_by_user_id, client_email, client_name } = body;
+    const { client_id, client_email, client_name } = body;
 
     if (!client_id || typeof client_id !== "string") {
-      return new Response(
-        JSON.stringify({ error: "client_id is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "client_id is required" }, 400);
     }
-
     if (!client_email || typeof client_email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client_email)) {
-      return new Response(
-        JSON.stringify({ error: "valid client_email is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "valid client_email is required" }, 400);
     }
 
-    // Create auth user with temp password (only used until invitee sets their own).
+    // Create auth user (in external project) with throwaway password — replaced on accept.
     const tempPassword = crypto.randomUUID();
-    const { error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { error: authError } = await (externalAdmin as any).auth.admin.createUser({
       email: client_email,
       password: tempPassword,
       email_confirm: true,
       user_metadata: {
         full_name: client_name || "",
-        client_id: client_id,
+        client_id,
       },
     });
 
-    if (authError && !authError.message.includes("already been registered")) {
-      return new Response(
-        JSON.stringify({ error: authError.message }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (authError && !String(authError.message || "").includes("already been registered")) {
+      console.error("[send] createUser error", { msg: authError.message });
+      return jsonResponse({ error: authError.message }, 400);
     }
 
-    // Create invite record
-    const { data: invite, error: inviteError } = await supabaseAdmin
+    // Insert invite row (external project). invited_by now points at external auth.users.
+    const { data: invite, error: inviteError } = await externalAdmin
       .from("client_invites")
       .insert({
         client_id,
         email: client_email,
-        invited_by: invited_by_user_id || null,
+        invited_by: adminUserId,
       })
       .select("token")
       .single();
 
     if (inviteError) {
-      return new Response(
-        JSON.stringify({ error: inviteError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.error("[send] client_invites insert error", { msg: inviteError.message, code: (inviteError as any).code });
+      return jsonResponse({ error: inviteError.message }, 500);
     }
 
     const siteUrl = Deno.env.get("SITE_URL") || req.headers.get("origin") || "";
-    const inviteLink = `${siteUrl}/accept-invite?token=${invite.token}`;
+    const inviteLink = `${siteUrl}/accept-invite?token=${(invite as any).token}`;
 
-    return new Response(
-      JSON.stringify({ success: true, email: client_email, invite_link: inviteLink }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ success: true, email: client_email, invite_link: inviteLink });
   } catch (err) {
-    // Log the real error server-side for debugging via Functions → Logs.
-    // Never echo internal error details back to the client.
     console.error("send-client-invite unhandled error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Internal server error" }, 500);
   }
 });
