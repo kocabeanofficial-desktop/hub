@@ -1,61 +1,45 @@
-## Diagnosis
+## Goal
 
-The 403 is coming from `requireAdminCaller()` inside `supabase/functions/send-client-invite/index.ts`, specifically this check:
+Make the client portal actually work. Right now `AppUser.clientId` is never populated, so `ClientDashboard`, `ClientProjects`, `ClientReports`, and `ClientSupport` always render with `clientId === undefined` and show no data.
 
-```ts
-scopedClient
-  .from("admin_users")
-  .select("role, is_active")
-  .eq("user_id", userRes.user.id)
-  .maybeSingle()
-```
+## Fix 1 — AuthContext: resolve `clientId` for client users
 
-The function treats any lookup error, missing row, inactive row, or non-`super_admin` role as:
+In `src/contexts/AuthContext.tsx`, extend `resolveAppUser` so that when the user is not an admin:
 
-```ts
-403 Forbidden: admin role required
-```
+1. Try `supaUser.user_metadata.client_id` first. The `send-client-invite` accept flow sets this on `auth.users` metadata, so most client users will have it.
+2. If missing, look it up by email:
+   ```ts
+   supabase.from("clients").select("id").eq("email", supaUser.email).maybeSingle()
+   ```
+3. Return `{ role: "client", clientId }`. If no `clientId` can be resolved, still return the user but with `clientId` undefined and surface a friendly `authError` like "Your account isn't linked to a client yet — please contact support." Keep the user signed in so they see the message instead of a blank screen.
+4. Wrap the new lookup in the existing `withTimeout` helper so a hung query doesn't freeze auth.
 
-The current architecture is split:
+No schema changes needed — `clients.email` already exists.
 
-- The browser app signs admins in through the external project client in `src/integrations/supabase/client.ts`.
-- `send-client-invite` is deployed on Lovable Cloud, per `supabase/config.toml`.
-- The edge function verifies the bearer JWT against the external project, then reads external `admin_users` using that same user JWT.
-- No recent Lovable Cloud function logs were found for `Forbidden`, which means either the latest call was not captured/reached, or the 403 is happening on a deployed version/log path we need to test directly.
+## Fix 2 — Client dashboard frontend pass
 
-## Likely root cause
+While `clientId` is wired, polish the client-facing pages so the portal feels finished:
 
-Even when `auth.getUser(token)` succeeds, the scoped `admin_users` query can return no row or an RLS error if the external project's `admin_users` SELECT policy does not allow the caller to read their own admin row. Since the function uses the user's anon-scoped JWT for the role lookup, it depends on external RLS being correct.
+- **`ClientDashboard`** — show greeting with `user.name`, KPI cards (active projects, open tasks, latest report date), and quick links into Projects / Reports / Support. Empty states for each section.
+- **`ClientProjects`** — list view with status badge, last update, and a detail drawer or expandable row. Empty state.
+- **`ClientReports`** — chronological list grouped by month; each item links/downloads the report. Empty state.
+- **`ClientSupport`** — keep the four "Need help?" actions (email settings, add staff, upgrade website, chat). Confirm forms write to `email_settings_requests`, `staff_authorizations`, `upgrade_requests` per the existing memory.
+- Shared: a `ClientLayout` (or reuse DashboardLayout in client mode) with sidebar nav: Dashboard, Projects, Reports, Support, plus sign-out.
+- Loading skeletons and a single "no client linked yet" state shown across all pages when `clientId` is missing.
 
-That makes valid `super_admin`s appear forbidden.
+## Out of scope
 
-## Implementation plan
+- No edits to `send-client-invite` or its secrets (per your instruction).
+- No DB migrations.
+- No changes to admin pages.
 
-1. **Add targeted diagnostics to the edge function**
-   - Log a safe, non-sensitive marker for which branch failed:
-     - missing bearer token
-     - invalid external session
-     - admin row lookup error
-     - admin row missing
-     - role/inactive mismatch
-   - Do not log tokens, secrets, or full user objects.
+## Files expected to change
 
-2. **Make admin authorization server-side and RLS-independent**
-   - Keep verifying the incoming bearer token with the external auth project.
-   - For the `admin_users` lookup, use a server-side credential for the external project instead of the user's RLS-scoped anon client.
-   - This avoids false 403s caused by external RLS while still authorizing by the verified `user_id`.
+- `src/contexts/AuthContext.tsx` — resolve `clientId`.
+- `src/pages/client/ClientDashboard.tsx`, `ClientProjects.tsx`, `ClientReports.tsx`, `ClientSupport.tsx` — frontend polish + empty/loading states.
+- Possibly a new `src/components/layout/ClientLayout.tsx` if DashboardLayout doesn't already adapt.
+- Possibly small additions to `src/hooks/useClientData.ts` (or wherever `useClientProjects` etc. live) for typing/empty handling — read-only behavior only.
 
-3. **Move external project credentials out of hardcoded source where appropriate**
-   - Keep the external URL / publishable key only if needed for `auth.getUser`.
-   - Add/use an external service credential secret for the server-side admin role lookup.
-   - If the secret is not already configured, request it before deploying.
+## Open question
 
-4. **Preserve the security boundary**
-   - The invite send path remains admin-only.
-   - Public `validate` and `accept` actions remain token-secured and unauthenticated.
-   - The edge function still writes invite records only with Lovable Cloud server credentials.
-
-5. **Validate after approval**
-   - Deploy/test the function with a valid admin JWT.
-   - Confirm the function reaches Lovable Cloud and returns success for `support@kocabean.co.za` or another active `super_admin`.
-   - Confirm non-admin or missing-token calls still return 401/403.
+Do you want the existing `DashboardLayout` reused for the client portal (with a different nav set when `user.role === "client"`), or a separate `ClientLayout` component? I'll default to reusing `DashboardLayout` with role-based nav unless you prefer otherwise.

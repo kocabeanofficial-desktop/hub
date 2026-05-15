@@ -35,7 +35,7 @@ const withTimeout = (operation: () => PromiseLike<any>, timeoutMs: number, timeo
       .finally(() => clearTimeout(timeoutId));
   });
 
-async function resolveAppUser(supaUser: User): Promise<AppUser> {
+async function resolveAppUser(supaUser: User): Promise<{ user: AppUser; warning?: string }> {
   const { data: adminRow, error: adminLookupError } = await withTimeout(
     () =>
       supabase
@@ -53,21 +53,58 @@ async function resolveAppUser(supaUser: User): Promise<AppUser> {
 
   if (adminRow && adminRow.is_active && adminRow.role === "super_admin") {
     return {
-      id: supaUser.id,
-      email: supaUser.email ?? "",
-      name: supaUser.email?.split("@")[0] || "Admin",
-      role: "admin",
+      user: {
+        id: supaUser.id,
+        email: supaUser.email ?? "",
+        name: supaUser.email?.split("@")[0] || "Admin",
+        role: "admin",
+      },
     };
   }
 
-  // Default: deny access (no client portal without explicit setup)
-  // For now treat non-admin authenticated users as having no valid role
-  return {
+  // ── Client role: resolve clientId ──
+  // 1) prefer auth user_metadata.client_id (set by send-client-invite accept flow)
+  // 2) fall back to clients.email lookup
+  const metadata = (supaUser.user_metadata ?? {}) as Record<string, unknown>;
+  let clientId: string | undefined =
+    typeof metadata.client_id === "string" ? (metadata.client_id as string) : undefined;
+
+  if (!clientId && supaUser.email) {
+    try {
+      const { data: clientRow } = await withTimeout(
+        () =>
+          supabase
+            .from("clients")
+            .select("id")
+            .eq("email", supaUser.email!)
+            .maybeSingle(),
+        ADMIN_LOOKUP_TIMEOUT_MS,
+        "Client lookup timed out. Please refresh and try again."
+      );
+      if (clientRow?.id) clientId = clientRow.id as string;
+    } catch {
+      // non-fatal — surface warning below
+    }
+  }
+
+  const baseUser: AppUser = {
     id: supaUser.id,
     email: supaUser.email ?? "",
-    name: supaUser.user_metadata?.full_name || supaUser.email?.split("@")[0] || "User",
+    name:
+      (typeof metadata.full_name === "string" ? (metadata.full_name as string) : null) ||
+      supaUser.email?.split("@")[0] ||
+      "User",
     role: "client",
+    clientId,
   };
+
+  if (!clientId) {
+    return {
+      user: baseUser,
+      warning: "Your account isn't linked to a client yet. Please contact support.",
+    };
+  }
+  return { user: baseUser };
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -89,9 +126,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const appUser = await resolveAppUser(session.user);
+      const { user: appUser, warning } = await resolveAppUser(session.user);
       if (requestId !== authRequestId.current) return;
       setUser(appUser);
+      if (warning) setAuthError(warning);
     } catch (error) {
       if (requestId !== authRequestId.current) return;
       setUser(null);
