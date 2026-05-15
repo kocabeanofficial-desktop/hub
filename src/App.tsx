@@ -21,6 +21,7 @@ import WebsiteContent from "./pages/admin/WebsiteContent";
 import PageContentEditor from "./pages/admin/PageContentEditor";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientProjects from "./pages/client/ClientProjects";
+import ClientWebsite from "./pages/client/ClientWebsite";
 import ClientSupport from "./pages/client/ClientSupport";
 import ClientReports from "./pages/client/ClientReports";
 import AcceptInvite from "./pages/AcceptInvite";
