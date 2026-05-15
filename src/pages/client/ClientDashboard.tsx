@@ -3,33 +3,36 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import {
   Globe, Package, FileText, MessageSquare, ExternalLink,
-  ShieldCheck, Mail, Server, ArrowUpRight, Sparkles, LifeBuoy,
+  ShieldCheck, Mail, Server, ArrowUpRight, Sparkles, LifeBuoy, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useWebsitesByClient } from "@/hooks/useWebsites";
+import { useClientReports } from "@/hooks/useSupabaseData";
 
-const CLIENT = {
+const FALLBACK = {
   name: "Smartlook Pharmacy",
   domain: "smartlook.co.za",
   email: "info@smartlook.co.za",
-  hosting: "Koca Bean Managed Hosting",
 };
 
 const services = [
   { name: "Website Hosting", status: "Active", icon: Server, detail: "cPanel · SSL enabled" },
-  { name: "Business Email", status: "Active", icon: Mail, detail: "5 mailboxes" },
+  { name: "Business Email", status: "Active", icon: Mail, detail: "Mailboxes managed" },
   { name: "Domain Management", status: "Active", icon: Globe, detail: "Renews annually" },
   { name: "Maintenance & Support", status: "Active", icon: ShieldCheck, detail: "Monthly retainer" },
-];
-
-const reports = [
-  { title: "Monthly Website Report", period: "April 2026", type: "Performance" },
-  { title: "SEO Snapshot", period: "Q1 2026", type: "SEO" },
-  { title: "Hosting Uptime Report", period: "March 2026", type: "Hosting" },
 ];
 
 const ClientDashboard = () => {
   const { user } = useAuth();
   const firstName = user?.name?.split(" ")[0] || "there";
+
+  const { data: websites = [] } = useWebsitesByClient(user?.clientId);
+  const { data: reports = [] } = useClientReports(user?.clientId);
+
+  const site = websites[0];
+  const businessName = site?.name || FALLBACK.name;
+  const domain = site?.domain || FALLBACK.domain;
+  const email = user?.email || FALLBACK.email;
 
   return (
     <DashboardLayout>
@@ -41,7 +44,7 @@ const ClientDashboard = () => {
             Welcome back, {firstName} 👋
           </h1>
           <p className="text-sm mt-1 text-primary-foreground/80">
-            Here's everything we're managing for {CLIENT.name}.
+            Here's everything we're managing for {businessName}.
           </p>
         </div>
 
@@ -55,14 +58,14 @@ const ClientDashboard = () => {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your Website</p>
-                  <h2 className="text-lg font-heading font-bold text-foreground mt-0.5">{CLIENT.name}</h2>
+                  <h2 className="text-lg font-heading font-bold text-foreground mt-0.5">{businessName}</h2>
                   <a
-                    href={`https://${CLIENT.domain}`}
+                    href={`https://${domain}`}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline mt-1"
                   >
-                    {CLIENT.domain}
+                    {domain}
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 </div>
@@ -74,8 +77,8 @@ const ClientDashboard = () => {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5 pt-5 border-t border-border">
               <div>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Hosting</p>
-                <p className="text-sm font-medium text-foreground mt-0.5">{CLIENT.hosting}</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Platform</p>
+                <p className="text-sm font-medium text-foreground mt-0.5">{site?.platform || "Koca Bean Hosting"}</p>
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground">SSL</p>
@@ -83,8 +86,16 @@ const ClientDashboard = () => {
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Primary Email</p>
-                <p className="text-sm font-medium text-foreground mt-0.5 truncate">{CLIENT.email}</p>
+                <p className="text-sm font-medium text-foreground mt-0.5 truncate">{email}</p>
               </div>
+            </div>
+
+            <div className="mt-5 pt-5 border-t border-border">
+              <Button asChild size="sm" variant="outline">
+                <Link to="/client/website">
+                  <Pencil className="h-4 w-4" /> Edit Website Content
+                </Link>
+              </Button>
             </div>
           </div>
 
@@ -95,6 +106,12 @@ const ClientDashboard = () => {
               <h2 className="text-sm font-heading font-bold text-foreground">Quick Actions</h2>
             </div>
             <div className="space-y-2">
+              <Button asChild variant="outline" className="w-full justify-between">
+                <Link to="/client/website">
+                  <span className="flex items-center gap-2"><Pencil className="h-4 w-4" /> Edit Website</span>
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
               <Button asChild variant="outline" className="w-full justify-between">
                 <Link to="/client/support">
                   <span className="flex items-center gap-2"><LifeBuoy className="h-4 w-4" /> Get Support</span>
@@ -108,8 +125,8 @@ const ClientDashboard = () => {
                 </Link>
               </Button>
               <Button asChild variant="outline" className="w-full justify-between">
-                <a href={`https://${CLIENT.domain}`} target="_blank" rel="noreferrer">
-                  <span className="flex items-center gap-2"><Globe className="h-4 w-4" /> Visit Website</span>
+                <a href={`https://${domain}`} target="_blank" rel="noreferrer">
+                  <span className="flex items-center gap-2"><Globe className="h-4 w-4" /> Visit Site</span>
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </Button>
@@ -128,10 +145,7 @@ const ClientDashboard = () => {
           </div>
           <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border">
             {services.map((s, i) => (
-              <div
-                key={s.name}
-                className={`px-5 py-4 ${i >= 2 ? "sm:border-t sm:border-border" : ""}`}
-              >
+              <div key={s.name} className={`px-5 py-4 ${i >= 2 ? "sm:border-t sm:border-border" : ""}`}>
                 <div className="flex items-start gap-3">
                   <div className="rounded-lg bg-muted p-2 text-foreground">
                     <s.icon className="h-4 w-4" />
@@ -161,17 +175,23 @@ const ClientDashboard = () => {
             </Link>
           </div>
           <div className="divide-y divide-border">
-            {reports.map((r) => (
-              <div key={r.title} className="px-5 py-4 flex items-center justify-between hover:bg-muted/30 transition-colors">
+            {reports.slice(0, 5).map((r) => (
+              <div key={r.id} className="px-5 py-4 flex items-center justify-between hover:bg-muted/30 transition-colors">
                 <div>
-                  <p className="text-sm font-medium text-foreground">{r.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{r.period} · {r.type}</p>
+                  <p className="text-sm font-medium text-foreground">{r.title || "Untitled report"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {(r.report_type || "report").replace(/_/g, " ")} ·{" "}
+                    {new Date(r.created_at).toLocaleDateString("en-ZA", { month: "short", year: "numeric" })}
+                  </p>
                 </div>
-                <Button size="sm" variant="ghost" className="text-primary">
-                  Open <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
-                </Button>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {r.status}
+                </span>
               </div>
             ))}
+            {reports.length === 0 && (
+              <p className="px-5 py-8 text-sm text-muted-foreground text-center">No reports yet.</p>
+            )}
           </div>
         </div>
 
