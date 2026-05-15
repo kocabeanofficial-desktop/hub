@@ -230,7 +230,10 @@ const Clients = () => {
           client_id: client.id,
           client_email: client.email,
           client_name: client.business_name,
-          invited_by_user_id: user?.id || null,
+          // FK on client_invites.invited_by points to Lovable Cloud auth.users,
+          // but admins authenticate against the external project. Pass null to
+          // avoid foreign key violation.
+          invited_by_user_id: null,
         },
         accessToken,
       );
