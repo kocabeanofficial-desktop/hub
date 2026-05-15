@@ -126,9 +126,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const appUser = await resolveAppUser(session.user);
+      const { user: appUser, warning } = await resolveAppUser(session.user);
       if (requestId !== authRequestId.current) return;
       setUser(appUser);
+      if (warning) setAuthError(warning);
     } catch (error) {
       if (requestId !== authRequestId.current) return;
       setUser(null);
