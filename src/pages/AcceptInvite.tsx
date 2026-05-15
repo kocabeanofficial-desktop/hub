@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { callInviteFunction } from "@/lib/inviteFunction";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,9 +28,7 @@ const AcceptInvite = () => {
     }
 
     const checkToken = async () => {
-      const { data, error } = await supabase.functions.invoke("send-client-invite", {
-        body: { action: "validate", token },
-      });
+      const { data, error } = await callInviteFunction({ action: "validate", token });
 
       if (error || !data?.valid) {
         setStatus("invalid");
@@ -59,9 +58,7 @@ const AcceptInvite = () => {
     setStatus("submitting");
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("send-client-invite", {
-        body: { action: "accept", token, password },
-      });
+      const { data, error: fnError } = await callInviteFunction({ action: "accept", token, password });
 
       if (fnError || (data && data.error)) {
         setError(data?.error || fnError?.message || "Failed to set up account.");
