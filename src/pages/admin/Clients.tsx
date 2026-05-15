@@ -224,17 +224,15 @@ const Clients = () => {
         setSendingInvite(null);
         return;
       }
-      const { data, error: fnError } = await supabase.functions.invoke("send-client-invite", {
-        body: {
+      const { data, error: fnError } = await callInviteFunction(
+        {
           client_id: client.id,
           client_email: client.email,
           client_name: client.business_name,
           invited_by_user_id: user?.id || null,
         },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+        accessToken,
+      );
       if (fnError || (data && data.error)) {
         toast({ title: "Invite failed", description: data?.error || fnError?.message || "Unknown error", variant: "destructive" });
       } else {
