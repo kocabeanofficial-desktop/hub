@@ -101,6 +101,7 @@ const App: React.FC = () => (
             {/* Client routes — accessible to any authenticated user (admins included for testing) */}
             <Route path="/client" element={<ProtectedRoute><ClientDashboard /></ProtectedRoute>} />
             <Route path="/client/projects" element={<ProtectedRoute><ClientProjects /></ProtectedRoute>} />
+            <Route path="/client/website" element={<ProtectedRoute><ClientWebsite /></ProtectedRoute>} />
             <Route path="/client/support" element={<ProtectedRoute><ClientSupport /></ProtectedRoute>} />
             <Route path="/client/reports" element={<ProtectedRoute><ClientReports /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
