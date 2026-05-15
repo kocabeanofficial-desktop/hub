@@ -97,11 +97,11 @@ const App: React.FC = () => (
             <Route path="/admin/activity" element={<ProtectedRoute role="admin"><ActivityLog /></ProtectedRoute>} />
             <Route path="/admin/websites/:websiteId/content" element={<ProtectedRoute role="admin"><WebsiteContent /></ProtectedRoute>} />
             <Route path="/admin/websites/:websiteId/content/:pageId" element={<ProtectedRoute role="admin"><PageContentEditor /></ProtectedRoute>} />
-            {/* Client routes */}
-            <Route path="/client" element={<ProtectedRoute role="client"><ClientDashboard /></ProtectedRoute>} />
-            <Route path="/client/projects" element={<ProtectedRoute role="client"><ClientProjects /></ProtectedRoute>} />
-            <Route path="/client/support" element={<ProtectedRoute role="client"><ClientSupport /></ProtectedRoute>} />
-            <Route path="/client/reports" element={<ProtectedRoute role="client"><ClientReports /></ProtectedRoute>} />
+            {/* Client routes — accessible to any authenticated user (admins included for testing) */}
+            <Route path="/client" element={<ProtectedRoute><ClientDashboard /></ProtectedRoute>} />
+            <Route path="/client/projects" element={<ProtectedRoute><ClientProjects /></ProtectedRoute>} />
+            <Route path="/client/support" element={<ProtectedRoute><ClientSupport /></ProtectedRoute>} />
+            <Route path="/client/reports" element={<ProtectedRoute><ClientReports /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
