@@ -34,28 +34,54 @@ async function requireAdminCaller(req: Request): Promise<Response | null> {
 
   const { data: userRes, error: userErr } = await externalClient.auth.getUser(token);
   if (userErr || !userRes?.user) {
+    console.warn("[admin-auth] invalid external session", { msg: userErr?.message });
     return new Response(
       JSON.stringify({ error: "Unauthorized: invalid session" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
-  // Confirm the caller is an active super_admin in the external admin_users table.
-  // Use a fresh client scoped with the user's JWT so RLS applies normally.
-  const scopedClient = createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
+  const userId = userRes.user.id;
+  const userEmail = userRes.user.email ?? null;
 
-  const { data: adminRow, error: adminErr } = await scopedClient
+  // Look up admin_users on the EXTERNAL project. Prefer a service-role key if
+  // configured (RLS-independent); otherwise fall back to a JWT-scoped client.
+  const externalServiceKey = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY");
+  const lookupClient = externalServiceKey
+    ? createClient(EXTERNAL_SUPABASE_URL, externalServiceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+
+  const { data: adminRow, error: adminErr } = await lookupClient
     .from("admin_users")
     .select("role, is_active")
-    .eq("user_id", userRes.user.id)
+    .eq("user_id", userId)
     .maybeSingle();
 
-  if (adminErr || !adminRow || adminRow.is_active !== true || adminRow.role !== "super_admin") {
+  if (adminErr) {
+    console.error("[admin-auth] admin_users lookup error", {
+      userId, userEmail, usingServiceKey: !!externalServiceKey, msg: adminErr.message, code: (adminErr as any).code,
+    });
     return new Response(
-      JSON.stringify({ error: "Forbidden: admin role required" }),
+      JSON.stringify({ error: "Forbidden: admin role required", reason: "lookup_error" }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+  if (!adminRow) {
+    console.warn("[admin-auth] no admin_users row", { userId, userEmail, usingServiceKey: !!externalServiceKey });
+    return new Response(
+      JSON.stringify({ error: "Forbidden: admin role required", reason: "no_row" }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+  if (adminRow.is_active !== true || adminRow.role !== "super_admin") {
+    console.warn("[admin-auth] role/active mismatch", { userId, userEmail, role: adminRow.role, is_active: adminRow.is_active });
+    return new Response(
+      JSON.stringify({ error: "Forbidden: admin role required", reason: "role_mismatch" }),
       { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

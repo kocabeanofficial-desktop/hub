@@ -25,7 +25,8 @@ export async function callInviteFunction(
     let data: any = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
     if (!res.ok) {
-      return { data, error: { message: data?.error || `HTTP ${res.status}` } };
+      const detail = data?.reason ? ` (${data.reason})` : "";
+      return { data, error: { message: (data?.error || `HTTP ${res.status}`) + detail } };
     }
     return { data, error: null };
   } catch (err: any) {
