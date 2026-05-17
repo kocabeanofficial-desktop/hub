@@ -5,7 +5,7 @@ import { useWebsitesByClient, useWebsitePages } from "@/hooks/useWebsites";
 import {
   usePageFields,
   usePageContentValues,
-  useSaveContentValues,
+  useSaveContentValuesWithLog,
   useUploadWebsiteImage,
   type Field,
 } from "@/hooks/useWebsiteContent";
@@ -83,7 +83,6 @@ const ClientWebsite = () => {
   const homepage = pages[0];
   const { data: fields = [] } = usePageFields(homepage?.id);
   const { data: values = [] } = usePageContentValues(website?.id, homepage?.id);
-  const save = useSaveContentValues();
   const uploadImage = useUploadWebsiteImage();
 
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -95,6 +94,8 @@ const ClientWebsite = () => {
     for (const v of values) map[v.field_id] = v.value ?? "";
     return map;
   }, [values]);
+
+  const save = useSaveContentValuesWithLog(valueByField, user?.clientId ?? null);
 
   const visibleFields = useMemo(() => {
     const byKey = new Map<string, Field>();
