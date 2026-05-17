@@ -16,8 +16,15 @@ import { toast } from "sonner";
 
 const ClientWebsite = () => {
   const { user } = useAuth();
-  const { data: websites = [], isLoading: loadingSites } = useWebsitesByClient(user?.clientId);
+  const {
+    data: websites = [],
+    isLoading: loadingSites,
+    isError: websitesHasError,
+    error: websitesError,
+  } = useWebsitesByClient(user?.clientId);
   const website = websites[0];
+  const websiteErrorMessage =
+    websitesError instanceof Error ? websitesError.message : "Unable to load your linked website.";
   const { data: pages = [] } = useWebsitePages(website?.id);
   const homepage = pages[0];
   const { data: fields = [] } = usePageFields(homepage?.id);
@@ -44,7 +51,6 @@ const ClientWebsite = () => {
     if (!website || !homepage) return;
     const payloads = fields.map((f) => ({
       website_id: website.id,
-      page_id: homepage.id,
       field_id: f.id,
       value: draft[f.id] ?? "",
       updated_by: user?.id ?? null,
@@ -79,6 +85,14 @@ const ClientWebsite = () => {
         {loadingSites ? (
           <div className="bg-card rounded-2xl border border-border p-8 text-center text-sm text-muted-foreground">
             Loading…
+          </div>
+        ) : websitesHasError ? (
+          <div className="bg-card rounded-2xl border border-border p-6 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Could not load your website</p>
+              <p className="text-sm text-muted-foreground mt-1">{websiteErrorMessage}</p>
+            </div>
           </div>
         ) : !website ? (
           <div className="bg-card rounded-2xl border border-border p-6 flex items-start gap-3">
