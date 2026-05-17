@@ -123,3 +123,82 @@ export const useSaveContentValues = () => {
     },
   });
 };
+
+// ─────────────────────────────────────────────────────────────────
+// Change-log types
+// ─────────────────────────────────────────────────────────────────
+
+export interface ContentChangeLogPayload {
+  client_id:  string | null;
+  website_id: string;
+  field_id:   string;
+  old_value:  string | null;
+  new_value:  string;
+  changed_by: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// useSaveContentValuesWithLog
+// Wraps the existing upsert with a change-log step.
+// Extra param: valueByField – map of field_id → currently saved value.
+// Only logs fields where the draft value differs from the saved value.
+// The existing save flow (useSaveContentValues) is untouched.
+// ─────────────────────────────────────────────────────────────────
+
+export const useSaveContentValuesWithLog = (
+  valueByField: Record<string, string>
+) => {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payloads: SaveContentValuePayload[]) => {
+      if (payloads.length === 0) return [];
+
+      // 1. Build log entries only for changed fields
+      const logs: ContentChangeLogPayload[] = payloads
+        .filter((p) => {
+          const saved = valueByField[p.field_id] ?? "";
+          return (p.value ?? "") !== saved;
+        })
+        .map((p) => ({
+          client_id:  p.updated_by ?? null, // updated_by is user.id (serves as changed_by)
+          website_id: p.website_id,
+          field_id:   p.field_id,
+          old_value:  valueByField[p.field_id] ?? null,
+          new_value:  p.value ?? "",
+          changed_by: p.updated_by ?? null,
+        }));
+
+      // 2. Insert logs (non-blocking: log failure should not abort the save)
+      if (logs.length > 0) {
+        const { error: logError } = await supabase
+          .from("content_change_logs")
+          .insert(logs);
+        if (logError) {
+          // Log to console but do not throw – save must not be blocked by logging
+          console.warn("[content_change_logs] insert failed:", logError.message);
+        }
+      }
+
+      // 3. Upsert content_values (same logic as useSaveContentValues)
+      const rows = payloads.map((p) => ({
+        ...p,
+        updated_at: new Date().toISOString(),
+      }));
+      const { data, error } = await supabase
+        .from("content_values")
+        .upsert(rows, { onConflict: "website_id,field_id" })
+        .select();
+      if (error) throw error;
+      return data ?? [];
+    },
+    onSuccess: (_data, variables) => {
+      const first = variables[0];
+      if (first) {
+        qc.invalidateQueries({
+          queryKey: ["content_values", first.website_id],
+        });
+      }
+    },
+  });
+};
