@@ -38,8 +38,8 @@ const ClientWebsite = () => {
     return map;
   }, [values]);
 
-  // Pass valueByField so the hook can compare old vs new before logging
-  const save = useSaveContentValuesWithLog(valueByField);
+  // Pass valueByField and clientId so the hook can diff and log correctly
+  const save = useSaveContentValuesWithLog(valueByField, user?.clientId ?? null);
 
   useEffect(() => {
     const initial: Record<string, string> = {};
