@@ -50,7 +50,7 @@ export const usePageFields = (pageId: string | undefined) =>
     queryKey: ["fields", "by-page", pageId],
     queryFn: async () => {
       if (!pageId) return [];
-      // fields link via section_id → sections.page_id (no direct page_id on fields)
+      // fields link via section_id -> sections.page_id (no direct page_id on fields)
       const { data: sectionRows, error: sectionError } = await supabase
         .from("sections")
         .select("id")
@@ -73,7 +73,7 @@ export const usePageFields = (pageId: string | undefined) =>
 
 export const usePageContentValues = (
   websiteId: string | undefined,
-  pageId: string | undefined,
+  pageId: string | undefined
 ) =>
   useQuery({
     queryKey: ["content_values", websiteId, pageId],
@@ -140,13 +140,15 @@ export interface ContentChangeLogPayload {
 // ─────────────────────────────────────────────────────────────────
 // useSaveContentValuesWithLog
 // Wraps the existing upsert with a change-log step.
-// Extra param: valueByField – map of field_id → currently saved value.
-// Only logs fields where the draft value differs from the saved value.
-// The existing save flow (useSaveContentValues) is untouched.
+// Params:
+//   valueByField – map of field_id to currently saved value (for diff)
+//   clientId     – the client record UUID (from useAuth().user.clientId)
+// Only logs fields where draft value differs from the saved value.
 // ─────────────────────────────────────────────────────────────────
 
 export const useSaveContentValuesWithLog = (
-  valueByField: Record<string, string>
+  valueByField: Record<string, string>,
+  clientId: string | null | undefined
 ) => {
   const qc = useQueryClient();
 
@@ -161,7 +163,7 @@ export const useSaveContentValuesWithLog = (
           return (p.value ?? "") !== saved;
         })
         .map((p) => ({
-          client_id:  p.updated_by ?? null, // updated_by is user.id (serves as changed_by)
+          client_id:  clientId ?? null,
           website_id: p.website_id,
           field_id:   p.field_id,
           old_value:  valueByField[p.field_id] ?? null,
@@ -175,7 +177,6 @@ export const useSaveContentValuesWithLog = (
           .from("content_change_logs")
           .insert(logs);
         if (logError) {
-          // Log to console but do not throw – save must not be blocked by logging
           console.warn("[content_change_logs] insert failed:", logError.message);
         }
       }
