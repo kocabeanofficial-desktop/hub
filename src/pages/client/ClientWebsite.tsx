@@ -5,7 +5,7 @@ import { useWebsitesByClient, useWebsitePages } from "@/hooks/useWebsites";
 import {
   usePageFields,
   usePageContentValues,
-  useSaveContentValues,
+  useSaveContentValuesWithLog,
 } from "@/hooks/useWebsiteContent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,6 @@ const ClientWebsite = () => {
   const homepage = pages[0];
   const { data: fields = [] } = usePageFields(homepage?.id);
   const { data: values = [] } = usePageContentValues(website?.id, homepage?.id);
-  const save = useSaveContentValues();
 
   const [draft, setDraft] = useState<Record<string, string>>({});
 
@@ -38,6 +37,9 @@ const ClientWebsite = () => {
     for (const v of values) map[v.field_id] = v.value ?? "";
     return map;
   }, [values]);
+
+  // Pass valueByField so the hook can compare old vs new before logging
+  const save = useSaveContentValuesWithLog(valueByField);
 
   useEffect(() => {
     const initial: Record<string, string> = {};
@@ -104,38 +106,33 @@ const ClientWebsite = () => {
               </p>
             </div>
           </div>
-        ) : fields.length === 0 ? (
-          <div className="bg-card rounded-2xl border border-border p-6 text-sm text-muted-foreground">
-            No editable fields are configured for this site yet.
-          </div>
         ) : (
-          <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
-            {fields.map((f) => {
-              const isLong = f.field_type === "rich_text" || f.field_type === "textarea" || /hours|address|description/i.test(f.label);
-              return (
-                <div key={f.id} className="p-5 sm:p-6 space-y-2">
-                  <Label htmlFor={f.id} className="text-sm font-semibold text-foreground">
-                    {f.label}
+          <div className="bg-card rounded-2xl border border-border">
+            <div className="divide-y divide-border">
+              {fields.map((field) => (
+                <div key={field.id} className="p-5 sm:p-6">
+                  <Label className="text-sm font-semibold text-foreground mb-2 block">
+                    {field.label}
                   </Label>
-                  {isLong ? (
+                  {field.field_type === "textarea" ? (
                     <Textarea
-                      id={f.id}
-                      rows={3}
-                      value={draft[f.id] ?? ""}
-                      onChange={(e) => setDraft({ ...draft, [f.id]: e.target.value })}
-                      placeholder={f.default_value ?? ""}
+                      value={draft[field.id] ?? ""}
+                      onChange={(e) =>
+                        setDraft((prev) => ({ ...prev, [field.id]: e.target.value }))
+                      }
+                      className="resize-y"
                     />
                   ) : (
                     <Input
-                      id={f.id}
-                      value={draft[f.id] ?? ""}
-                      onChange={(e) => setDraft({ ...draft, [f.id]: e.target.value })}
-                      placeholder={f.default_value ?? ""}
+                      value={draft[field.id] ?? ""}
+                      onChange={(e) =>
+                        setDraft((prev) => ({ ...prev, [field.id]: e.target.value }))
+                      }
                     />
                   )}
                 </div>
-              );
-            })}
+              ))}
+            </div>
             <div className="p-5 sm:p-6 flex items-center justify-end gap-2">
               <Button onClick={handleSave} disabled={save.isPending}>
                 <Save className="h-4 w-4" /> {save.isPending ? "Saving…" : "Save Changes"}
