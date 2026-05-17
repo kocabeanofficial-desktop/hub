@@ -22,6 +22,23 @@ const ANON_KEY =
 
 const MIN_PASSWORD_LENGTH = 8;
 
+function isValidEmail(value: unknown): value is string {
+      return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function findClientAuthUser(
+      serviceClient: ReturnType<typeof createClient>,
+      clientId: string,
+      email?: string,
+) {
+      const { data: listData, error } = await (serviceClient as any).auth.admin.listUsers();
+      if (error) throw error;
+      return listData?.users?.find((u: any) =>
+              u?.user_metadata?.client_id === clientId ||
+              (email && String(u?.email || "").toLowerCase() === email.toLowerCase())
+      );
+}
+
 function jsonResponse(body: unknown, status = 200) {
       return new Response(JSON.stringify(body), {
               status,
@@ -189,6 +206,89 @@ Deno.serve(async (req) => {
 
         // ── Send invite (PRIVILEGED — requires valid super_admin JWT) ──
         // Default action is "send" — falls through if no action provided.
+        if (action === "manage_login") {
+                  const adminCheck = await requireAdminCaller(req, serviceClient);
+                  if (adminCheck instanceof Response) return adminCheck;
+
+                  if (!client_id || typeof client_id !== "string") {
+                              return jsonResponse({ error: "client_id is required" }, 400);
+                  }
+                  if (!isValidEmail(client_email)) {
+                              return jsonResponse({ error: "valid client_email is required" }, 400);
+                  }
+                  if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+                              return jsonResponse({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, 400);
+                  }
+                  if (password.length > 256) {
+                              return jsonResponse({ error: "Password is too long" }, 400);
+                  }
+
+                  const { data: clientRow, error: clientErr } = await serviceClient
+                    .from("clients")
+                    .select("id, business_name, full_name, email")
+                    .eq("id", client_id)
+                    .maybeSingle();
+
+                  if (clientErr) {
+                              console.error("[manage_login] client lookup error:", clientErr.message);
+                              return jsonResponse({ error: "Failed to load client: " + clientErr.message }, 500);
+                  }
+                  if (!clientRow) {
+                              return jsonResponse({ error: "Client not found" }, 404);
+                  }
+
+                  const existingUser = await findClientAuthUser(serviceClient, client_id, client_email);
+                  let authUserId: string | null = existingUser?.id ?? null;
+                  const userMetadata = {
+                              ...(existingUser?.user_metadata || {}),
+                              client_id,
+                              full_name: client_name || (clientRow as any).full_name || (clientRow as any).business_name || "",
+                  };
+
+                  if (existingUser) {
+                              const { data: updated, error: updateErr } = await (serviceClient as any).auth.admin.updateUserById(existingUser.id, {
+                                          email: client_email,
+                                          password,
+                                          email_confirm: true,
+                                          user_metadata: userMetadata,
+                              });
+                              if (updateErr) {
+                                          console.error("[manage_login] updateUserById error:", updateErr.message);
+                                          return jsonResponse({ error: updateErr.message }, 400);
+                              }
+                              authUserId = updated?.user?.id ?? existingUser.id;
+                  } else {
+                              const { data: created, error: createErr } = await (serviceClient as any).auth.admin.createUser({
+                                          email: client_email,
+                                          password,
+                                          email_confirm: true,
+                                          user_metadata: userMetadata,
+                              });
+                              if (createErr) {
+                                          console.error("[manage_login] createUser error:", createErr.message);
+                                          return jsonResponse({ error: createErr.message }, 400);
+                              }
+                              authUserId = created?.user?.id ?? null;
+                  }
+
+                  const { error: updateClientErr } = await serviceClient
+                    .from("clients")
+                    .update({ email: client_email, updated_at: new Date().toISOString() })
+                    .eq("id", client_id);
+
+                  if (updateClientErr) {
+                              console.error("[manage_login] clients update error:", updateClientErr.message);
+                              return jsonResponse({ error: "Login user updated, but client email update failed: " + updateClientErr.message }, 500);
+                  }
+
+                  return jsonResponse({
+                              success: true,
+                              client_id,
+                              email: client_email,
+                              auth_user_id: authUserId,
+                  });
+        }
+
         if (action === "send" || action === undefined || action === null) {
                   const adminCheck = await requireAdminCaller(req, serviceClient);
                   if (adminCheck instanceof Response) return adminCheck;
@@ -196,7 +296,7 @@ Deno.serve(async (req) => {
                        if (!client_id || typeof client_id !== "string") {
                                    return jsonResponse({ error: "client_id is required" }, 400);
                        }
-                  if (!client_email || typeof client_email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client_email)) {
+                  if (!isValidEmail(client_email)) {
                               return jsonResponse({ error: "valid client_email is required" }, 400);
                   }
 
