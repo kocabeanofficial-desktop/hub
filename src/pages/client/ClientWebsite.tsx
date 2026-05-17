@@ -58,8 +58,8 @@ const ClientWebsite = () => {
     try {
       await save.mutateAsync(payloads);
       toast.success("Website content updated");
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to save");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
     }
   };
 

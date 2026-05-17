@@ -1,10 +1,17 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Globe, Mail, Phone, Building2, ArrowRight } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Globe, Mail, Phone, Building2, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useClient } from "@/hooks/useClients";
 import { useWebsitesByClient } from "@/hooks/useWebsites";
+import { supabase } from "@/integrations/supabase/client";
+import { callInviteFunction } from "@/lib/inviteFunction";
+import type { DbClient } from "@/types/database";
 
 const ClientDetail = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -93,6 +100,8 @@ const ClientDetail = () => {
               </div>
             </div>
 
+            <ClientAccessSection client={client} />
+
             {/* Linked websites */}
             <section className="rounded-xl border border-border bg-card p-6">
               <div className="flex items-center justify-between mb-4">
@@ -172,3 +181,136 @@ const ClientDetail = () => {
 };
 
 export default ClientDetail;
+
+function ClientAccessSection({ client }: { client: DbClient }) {
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState(client.email ?? "");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSuccess(null);
+    setError(null);
+
+    if (!email.trim()) {
+      setError("Email is required.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        setError("Admin session expired. Please sign in again.");
+        return;
+      }
+
+      const { data, error: fnError } = await callInviteFunction(
+        {
+          action: "manage_login",
+          client_id: client.id,
+          client_email: email.trim().toLowerCase(),
+          client_name: client.business_name || "",
+          password,
+        },
+        accessToken,
+      );
+
+      if (fnError || data?.error) {
+        setError(data?.error || fnError?.message || "Failed to update client login.");
+        return;
+      }
+
+      setSuccess(`Login updated for ${data.email}.`);
+      setPassword("");
+      queryClient.invalidateQueries({ queryKey: ["client", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["clients", "by-business-name"] });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update client login.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function copyDetails() {
+    const text = [
+      "Koca Bean Client Portal",
+      "Login: https://hub.kocabean.co.za/login",
+      `Email: ${email.trim()}`,
+      password ? `Password: ${password}` : "Password: [enter the password you set]",
+    ].join("\n");
+
+    await navigator.clipboard.writeText(text);
+    setSuccess("Login details copied.");
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
+        <div>
+          <h2 className="text-base font-heading font-semibold text-foreground">Client Access</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Set or reset this client's portal login. This links the auth user to this client record.
+          </p>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <Label htmlFor="client-login-email">Login email</Label>
+          <Input
+            id="client-login-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="client@example.com"
+            disabled={submitting}
+          />
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor="client-login-password">Password</Label>
+          <Input
+            id="client-login-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Minimum 8 characters"
+            disabled={submitting}
+          />
+        </div>
+
+        {error && (
+          <div className="sm:col-span-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        )}
+
+        {success && (
+          <div className="sm:col-span-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 flex items-start gap-2">
+            <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <p className="text-sm text-foreground">{success}</p>
+          </div>
+        )}
+
+        <div className="sm:col-span-2 flex items-center justify-end gap-2 flex-wrap">
+          <Button type="button" variant="outline" onClick={copyDetails} disabled={!email.trim()}>
+            Copy Login Details
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Updating..." : "Update Login"}
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+}
