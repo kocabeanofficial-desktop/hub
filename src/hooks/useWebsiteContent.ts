@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+const WEBSITE_MEDIA_BUCKET = "website-media";
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
 export interface Section {
   id: string;
   page_id: string;
@@ -97,6 +101,46 @@ export interface SaveContentValuePayload {
   updated_by?: string | null;
 }
 
+export interface WebsiteImageUploadPayload {
+  websiteId: string;
+  fieldId: string;
+  file: File;
+}
+
+export const validateWebsiteImage = (file: File) => {
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    throw new Error("Please upload a JPG, PNG, or WebP image.");
+  }
+
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error("Please upload an image smaller than 5 MB.");
+  }
+};
+
+export const useUploadWebsiteImage = () =>
+  useMutation({
+    mutationFn: async ({ websiteId, fieldId, file }: WebsiteImageUploadPayload) => {
+      validateWebsiteImage(file);
+
+      const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const safeName = `${fieldId}-${Date.now()}.${extension}`;
+      const path = `${websiteId}/${safeName}`;
+
+      const { error } = await supabase.storage
+        .from(WEBSITE_MEDIA_BUCKET)
+        .upload(path, file, {
+          cacheControl: "3600",
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage.from(WEBSITE_MEDIA_BUCKET).getPublicUrl(path);
+      return data.publicUrl;
+    },
+  });
+
 export const useSaveContentValues = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -118,6 +162,7 @@ export const useSaveContentValues = () => {
       if (first) {
         qc.invalidateQueries({
           queryKey: ["content_values", first.website_id],
+          exact: false,
         });
       }
     },
