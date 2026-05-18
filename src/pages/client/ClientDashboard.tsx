@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import {
   Globe, Package, FileText, MessageSquare, ExternalLink,
-  ShieldCheck, Mail, Server, ArrowUpRight, Sparkles, LifeBuoy, Pencil,
+  ShieldCheck, Mail, Server, ArrowUpRight, Sparkles, LifeBuoy, Pencil, ShoppingBag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWebsitesByClient } from "@/hooks/useWebsites";
@@ -101,7 +101,7 @@ const ClientDashboard = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5 pt-5 border-t border-border">
                   <div>
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Platform</p>
-                    <p className="text-sm font-medium text-foreground mt-0.5">{site.platform || "Not set"}</p>
+                    <p className="text-sm font-medium text-foreground mt-0.5">{site.platform?.toLowerCase() === "lovable" ? "KBCC" : (site.platform || "Not set")}</p>
                   </div>
                   <div>
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Status</p>
@@ -119,6 +119,16 @@ const ClientDashboard = () => {
                       <Pencil className="h-4 w-4" /> Edit Website Content
                     </Link>
                   </Button>
+                  {(site as any).store_admin_url && (
+                    <>
+                      <Button asChild size="sm" variant="outline" className="mt-2">
+                        <a href={(site as any).store_admin_url} target="_blank" rel="noreferrer" className="flex items-center gap-2">
+                          <ShoppingBag className="h-4 w-4" /> Manage Store
+                        </a>
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-1">Opens your product/store manager.</p>
+                    </>
+                  )}
                 </div>
               </>
             )}
@@ -137,6 +147,14 @@ const ClientDashboard = () => {
                   <ArrowUpRight className="h-4 w-4" />
                 </Link>
               </Button>
+              {(site as any).store_admin_url && (
+                <Button asChild variant="outline" className="w-full justify-between">
+                  <a href={(site as any).store_admin_url} target="_blank" rel="noreferrer">
+                    <span className="flex items-center gap-2"><ShoppingBag className="h-4 w-4" /> Manage Store</span>
+                    <ArrowUpRight className="h-4 w-4" />
+                  </a>
+                </Button>
+              )}
               <Button asChild variant="outline" className="w-full justify-between">
                 <Link to="/client/support">
                   <span className="flex items-center gap-2"><LifeBuoy className="h-4 w-4" /> Get Support</span>
