@@ -1,8 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Loader2, Mail, KeyRound } from "lucide-react";
 import kocaBeanLogo from "@/assets/koca-bean-logo.png";
+
+const PORTAL_ACCESS_ERROR = "This email is not set up for portal access. Please contact Koca Bean.";
+
+const cleanOtpError = (message?: string) => {
+  const normalized = (message ?? "").toLowerCase();
+  if (
+    normalized.includes("signup") ||
+    normalized.includes("signups") ||
+    normalized.includes("not found") ||
+    normalized.includes("user") ||
+    normalized.includes("invalid login credentials")
+  ) {
+    return PORTAL_ACCESS_ERROR;
+  }
+  return message || "Failed to send login code. Please try again.";
+};
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -12,20 +28,27 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [showPasswordFallback, setShowPasswordFallback] = useState(false);
-  const { login, sendOtp, verifyOtp } = useAuth();
+  const { login, sendOtp, verifyOtp, isAuthenticated, isLoading, user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !user) return;
+    navigate(user.role === "admin" ? "/admin" : "/client", { replace: true });
+  }, [isAuthenticated, isLoading, navigate, user]);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) { setError("Please enter your email address."); return; }
+    const loginEmail = email.trim().toLowerCase();
+    if (!loginEmail) { setError("Please enter your email address."); return; }
     setError("");
     setLoading(true);
-    const result = await sendOtp(email);
+    const result = await sendOtp(loginEmail);
     setLoading(false);
     if (result.success) {
+      setEmail(loginEmail);
       setOtpSent(true);
     } else {
-      setError(result.error || "Failed to send login code. Please try again.");
+      setError(cleanOtpError(result.error));
     }
   };
 
@@ -34,10 +57,10 @@ const Login = () => {
     if (!otpCode) { setError("Please enter the 6-digit code from your email."); return; }
     setError("");
     setLoading(true);
-    const result = await verifyOtp(email, otpCode);
+    const result = await verifyOtp(email.trim().toLowerCase(), otpCode);
     setLoading(false);
     if (result.success) {
-      navigate("/client");
+      // AuthContext/LoginRoute will redirect based on resolved role.
     } else {
       setError(result.error || "Invalid or expired code. Please try again.");
     }
@@ -47,10 +70,10 @@ const Login = () => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const result = await login(email, password);
+    const result = await login(email.trim().toLowerCase(), password);
     setLoading(false);
     if (result.success) {
-      navigate("/admin");
+      // AuthContext/LoginRoute will redirect based on resolved role.
     } else {
       setError(result.error || "Invalid email or password.");
     }

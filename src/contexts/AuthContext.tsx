@@ -53,7 +53,7 @@ async function resolveAppUser(supaUser: User): Promise<{ user: AppUser; warning?
     throw new Error("Could not verify admin permissions. Please try again.");
   }
 
-  if (adminRow && adminRow.is_active && adminRow.role === "super_admin") {
+  if (adminRow && adminRow.is_active && ["admin", "super_admin"].includes(adminRow.role)) {
     return {
       user: {
         id: supaUser.id,
@@ -189,7 +189,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const sendOtp = useCallback(async (email: string) => {
     setAuthError(null);
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/client`,
+      },
+    });
     if (error) {
       return { success: false, error: error.message };
     }
