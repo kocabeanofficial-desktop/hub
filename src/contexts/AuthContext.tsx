@@ -18,6 +18,8 @@ interface AuthContextType {
   isLoading: boolean;
   authError: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  sendOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
+  verifyOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -51,7 +53,7 @@ async function resolveAppUser(supaUser: User): Promise<{ user: AppUser; warning?
     throw new Error("Could not verify admin permissions. Please try again.");
   }
 
-  if (adminRow && adminRow.is_active && adminRow.role === "super_admin") {
+  if (adminRow && adminRow.is_active && ["admin", "super_admin"].includes(adminRow.role)) {
     return {
       user: {
         id: supaUser.id,
@@ -185,6 +187,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   }, [hydrateFromSession]);
 
+  const sendOtp = useCallback(async (email: string) => {
+    setAuthError(null);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/client`,
+      },
+    });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  }, []);
+
+  const verifyOtp = useCallback(async (email: string, token: string) => {
+    setIsLoading(true);
+    setAuthError(null);
+
+    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+    if (error) {
+      setIsLoading(false);
+      return { success: false, error: error.message };
+    }
+
+    if (data.session) {
+      await hydrateFromSession(data.session);
+    } else {
+      setIsLoading(false);
+    }
+
+    return { success: true };
+  }, [hydrateFromSession]);
+
   const logout = useCallback(async () => {
     setIsLoading(true);
     setAuthError(null);
@@ -194,7 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, authError, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, authError, login, sendOtp, verifyOtp, logout }}>
       {children}
     </AuthContext.Provider>
   );
