@@ -119,10 +119,10 @@ const ClientDashboard = () => {
                       <Pencil className="h-4 w-4" /> Edit Website Content
                     </Link>
                   </Button>
-                  {(site as any).store_admin_url && (
+                  {(site as any)?.store_admin_url && (
                     <>
                       <Button asChild size="sm" variant="outline" className="mt-2">
-                        <a href={(site as any).store_admin_url} target="_blank" rel="noreferrer" className="flex items-center gap-2">
+                        <a href={(site as any)?.store_admin_url} target="_blank" rel="noreferrer" className="flex items-center gap-2">
                           <ShoppingBag className="h-4 w-4" /> Manage Store
                         </a>
                       </Button>
@@ -147,9 +147,9 @@ const ClientDashboard = () => {
                   <ArrowUpRight className="h-4 w-4" />
                 </Link>
               </Button>
-              {(site as any).store_admin_url && (
+              {(site as any)?.store_admin_url && (
                 <Button asChild variant="outline" className="w-full justify-between">
-                  <a href={(site as any).store_admin_url} target="_blank" rel="noreferrer">
+                  <a href={(site as any)?.store_admin_url} target="_blank" rel="noreferrer">
                     <span className="flex items-center gap-2"><ShoppingBag className="h-4 w-4" /> Manage Store</span>
                     <ArrowUpRight className="h-4 w-4" />
                   </a>
