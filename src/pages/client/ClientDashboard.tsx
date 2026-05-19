@@ -4,10 +4,12 @@ import { Link } from "react-router-dom";
 import {
   Globe, Package, FileText, MessageSquare, ExternalLink,
   ShieldCheck, Mail, Server, ArrowUpRight, Sparkles, LifeBuoy, Pencil,
+  AlertTriangle, CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWebsitesByClient } from "@/hooks/useWebsites";
 import { useClientReports } from "@/hooks/useSupabaseData";
+import { useClientRenewalInvoices } from "@/hooks/useRenewals";
 
 const services = [
   { name: "Website Hosting", status: "Active", icon: Server, detail: "cPanel SSL enabled" },
@@ -27,8 +29,10 @@ const ClientDashboard = () => {
     error: websitesError,
   } = useWebsitesByClient(user?.clientId);
   const { data: reports = [] } = useClientReports(user?.clientId);
+  const { data: renewals = [] } = useClientRenewalInvoices(user?.clientId);
 
   const site = websites[0];
+  const activeRenewal = renewals[0];
   const websiteErrorMessage =
     websitesError instanceof Error ? websitesError.message : "Unable to load your linked website.";
 
@@ -160,6 +164,64 @@ const ClientDashboard = () => {
             </div>
           </div>
         </div>
+
+        {activeRenewal && (
+          <div className={`rounded-2xl border shadow-sm p-5 sm:p-6 ${
+            activeRenewal.status === "overdue"
+              ? "border-destructive/30 bg-destructive/5"
+              : "border-border bg-card"
+          }`}>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className={`rounded-xl p-2.5 ${
+                  activeRenewal.status === "overdue" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
+                }`}>
+                  {activeRenewal.status === "overdue" ? <AlertTriangle className="h-5 w-5" /> : <CalendarClock className="h-5 w-5" />}
+                </div>
+                <div>
+                  {activeRenewal.status === "overdue" && (
+                    <p className="text-xs font-bold uppercase tracking-wider text-destructive">Service in arrears</p>
+                  )}
+                  <h2 className="text-base font-heading font-bold text-foreground mt-0.5">Service renewal</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {activeRenewal.status === "overdue"
+                      ? `Your service renewal for ${activeRenewal.domain_or_service} is now overdue.`
+                      : `Your service renewal for ${activeRenewal.domain_or_service} is coming up. This is a reminder only, with no online payment step yet.`}
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4 text-sm">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Renewal date</p>
+                      <p className="font-medium text-foreground">{new Date(`${activeRenewal.renewal_date}T00:00:00`).toLocaleDateString("en-ZA")}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Invoice due</p>
+                      <p className="font-medium text-foreground">{activeRenewal.invoice_due_date ? new Date(`${activeRenewal.invoice_due_date}T00:00:00`).toLocaleDateString("en-ZA") : "Not set"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Amount due</p>
+                      <p className="font-medium text-foreground">
+                        {new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(Number(activeRenewal.balance_due ?? 0))}
+                      </p>
+                    </div>
+                  </div>
+                  {activeRenewal.status === "overdue" && (
+                    <p className="text-sm text-destructive mt-4">
+                      Please contact Koca Bean or arrange payment to avoid service interruption.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 sm:flex-col">
+                <Button asChild size="sm">
+                  <Link to={`/client/renewals/${activeRenewal.id}`}>View Renewal Details</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/client/support">Contact Koca Bean</Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Services */}
         <div className="bg-card rounded-2xl border border-border shadow-sm">
