@@ -1,16 +1,21 @@
 import { useState } from "react";
-import { useClientHostingAccounts, useClientDomains, useClientMailboxes } from "@/hooks/useSupabaseData";
-import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "@/hooks/use-toast";
-import { Plus, Loader2, Globe, Mail, Server } from "lucide-react";
+import { Globe, Loader2, Mail, Plus, Server } from "lucide-react";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from "@/components/ui/dialog";
+import { toast } from "@/hooks/use-toast";
+import { useClientDomains, useClientHostingAccounts, useClientMailboxes } from "@/hooks/useSupabaseData";
+import { supabase } from "@/integrations/supabase/client";
 
 const sslBadgeColors: Record<string, string> = {
   active: "bg-success/10 text-success border-success/20",
@@ -20,9 +25,13 @@ const sslBadgeColors: Record<string, string> = {
 };
 
 const SslPill = ({ status }: { status: string | null }) => {
-  const s = status || "none";
-  const style = sslBadgeColors[s] || sslBadgeColors.none;
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${style}`}>{s.replace(/^\w/, c => c.toUpperCase())}</span>;
+  const normalized = status || "none";
+  const style = sslBadgeColors[normalized] || sslBadgeColors.none;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${style}`}>
+      {normalized.replace(/^\w/, (char) => char.toUpperCase())}
+    </span>
+  );
 };
 
 export const ClientHostingSection = ({ clientId }: { clientId: string }) => {
@@ -51,7 +60,12 @@ export const ClientHostingSection = ({ clientId }: { clientId: string }) => {
       status: "pending",
     });
     setSaving(false);
-    if (error) { toast({ title: "Failed", description: error.message, variant: "destructive" }); return; }
+
+    if (error) {
+      toast({ title: "Failed to add domain", description: error.message, variant: "destructive" });
+      return;
+    }
+
     toast({ title: "Domain added" });
     queryClient.invalidateQueries({ queryKey: ["domains", clientId] });
     queryClient.invalidateQueries({ queryKey: ["domains"] });
@@ -69,7 +83,12 @@ export const ClientHostingSection = ({ clientId }: { clientId: string }) => {
       status: "pending",
     });
     setSaving(false);
-    if (error) { toast({ title: "Failed", description: error.message, variant: "destructive" }); return; }
+
+    if (error) {
+      toast({ title: "Failed to add mailbox", description: error.message, variant: "destructive" });
+      return;
+    }
+
     toast({ title: "Mailbox added" });
     queryClient.invalidateQueries({ queryKey: ["mailboxes", clientId] });
     queryClient.invalidateQueries({ queryKey: ["mailboxes"] });
@@ -85,7 +104,12 @@ export const ClientHostingSection = ({ clientId }: { clientId: string }) => {
       status: "pending",
     });
     setSaving(false);
-    if (error) { toast({ title: "Failed", description: error.message, variant: "destructive" }); return; }
+
+    if (error) {
+      toast({ title: "Failed to add hosting account", description: error.message, variant: "destructive" });
+      return;
+    }
+
     toast({ title: "Hosting account added" });
     queryClient.invalidateQueries({ queryKey: ["hosting_accounts", clientId] });
     queryClient.invalidateQueries({ queryKey: ["hosting_accounts"] });
@@ -93,83 +117,109 @@ export const ClientHostingSection = ({ clientId }: { clientId: string }) => {
     setCpanelUsername("");
   };
 
-  const isLoading = loadingAccounts || loadingDomains || loadingMailboxes;
-
   return (
     <div className="space-y-4">
       <div className="bg-card rounded-2xl border border-border shadow-sm">
         <div className="px-4 py-3.5 border-b border-border flex items-center justify-between">
           <h3 className="text-sm font-heading font-bold text-foreground flex items-center gap-2">
-            <Server className="h-4 w-4 text-muted-foreground" /> Hosting & Infrastructure
+            <Globe className="h-4 w-4 text-muted-foreground" /> Domains ({domains.length})
           </h3>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setDomainDialog(true)}>
+            <Plus className="h-3.5 w-3.5" /> Add Domain
+          </Button>
         </div>
 
-        {isLoading ? (
-          <div className="px-4 py-8 text-center"><Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" /></div>
+        {loadingDomains ? (
+          <div className="px-4 py-8 text-center">
+            <Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" />
+          </div>
         ) : (
           <div className="divide-y divide-border">
-            {/* Hosting Accounts */}
-            <div className="px-4 py-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hosting Accounts ({accounts.length})</p>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setHostingDialog(true)}>
-                  <Plus className="h-3 w-3" /> Add
-                </Button>
-              </div>
-              {accounts.length === 0 && <p className="text-sm text-muted-foreground py-2">No hosting accounts.</p>}
-              {accounts.map((a) => (
-                <div key={a.id} className="flex items-center justify-between py-1.5 text-sm">
-                  <span className="text-foreground">{a.cpanel_username || "Account"} {a.package ? `· ${a.package}` : ""}</span>
-                  <StatusBadge status={a.status} />
+            {domains.length === 0 && (
+              <p className="px-4 py-6 text-sm text-muted-foreground text-center">No domains.</p>
+            )}
+            {domains.map((domain) => (
+              <div key={domain.id} className="px-4 py-3.5 flex items-center justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-medium text-foreground">{domain.domain_name}</p>
+                  {domain.registrar && <p className="text-xs text-muted-foreground mt-0.5">{domain.registrar}</p>}
                 </div>
-              ))}
-            </div>
-
-            {/* Domains */}
-            <div className="px-4 py-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Globe className="h-3.5 w-3.5" /> Domains ({domains.length})
-                </p>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setDomainDialog(true)}>
-                  <Plus className="h-3 w-3" /> Add
-                </Button>
-              </div>
-              {domains.length === 0 && <p className="text-sm text-muted-foreground py-2">No domains.</p>}
-              {domains.map((d) => (
-                <div key={d.id} className="flex items-center justify-between py-1.5 text-sm">
-                  <span className="text-foreground">{d.domain_name}</span>
-                  <div className="flex items-center gap-2">
-                    <SslPill status={d.ssl_status} />
-                    <StatusBadge status={d.status} />
-                  </div>
+                <div className="flex items-center gap-2">
+                  <SslPill status={domain.ssl_status} />
+                  <StatusBadge status={domain.status} />
                 </div>
-              ))}
-            </div>
-
-            {/* Mailboxes */}
-            <div className="px-4 py-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5" /> Mailboxes ({mailboxes.length})
-                </p>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setMailboxDialog(true)}>
-                  <Plus className="h-3 w-3" /> Add
-                </Button>
               </div>
-              {mailboxes.length === 0 && <p className="text-sm text-muted-foreground py-2">No mailboxes.</p>}
-              {mailboxes.map((m) => (
-                <div key={m.id} className="flex items-center justify-between py-1.5 text-sm">
-                  <span className="text-foreground">{m.email_address}</span>
-                  <StatusBadge status={m.status} />
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Add Domain Dialog */}
+      <div className="bg-card rounded-2xl border border-border shadow-sm">
+        <div className="px-4 py-3.5 border-b border-border flex items-center justify-between">
+          <h3 className="text-sm font-heading font-bold text-foreground flex items-center gap-2">
+            <Server className="h-4 w-4 text-muted-foreground" /> Hosting Accounts ({accounts.length})
+          </h3>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setHostingDialog(true)}>
+            <Plus className="h-3.5 w-3.5" /> Add Account
+          </Button>
+        </div>
+
+        {loadingAccounts ? (
+          <div className="px-4 py-8 text-center">
+            <Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" />
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {accounts.length === 0 && (
+              <p className="px-4 py-6 text-sm text-muted-foreground text-center">No hosting accounts.</p>
+            )}
+            {accounts.map((account) => (
+              <div key={account.id} className="px-4 py-3.5 flex items-center justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-medium text-foreground">{account.cpanel_username || "Hosting account"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {[account.server, account.ip_address].filter(Boolean).join(" / ") || "No server or IP set"}
+                  </p>
+                </div>
+                <StatusBadge status={account.status} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-card rounded-2xl border border-border shadow-sm">
+        <div className="px-4 py-3.5 border-b border-border flex items-center justify-between">
+          <h3 className="text-sm font-heading font-bold text-foreground flex items-center gap-2">
+            <Mail className="h-4 w-4 text-muted-foreground" /> Mailboxes ({mailboxes.length})
+          </h3>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMailboxDialog(true)}>
+            <Plus className="h-3.5 w-3.5" /> Add Mailbox
+          </Button>
+        </div>
+
+        {loadingMailboxes ? (
+          <div className="px-4 py-8 text-center">
+            <Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" />
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {mailboxes.length === 0 && (
+              <p className="px-4 py-6 text-sm text-muted-foreground text-center">No mailboxes.</p>
+            )}
+            {mailboxes.map((mailbox) => (
+              <div key={mailbox.id} className="px-4 py-3.5 flex items-center justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-medium text-foreground">{mailbox.email_address}</p>
+                  {mailbox.notes && <p className="text-xs text-muted-foreground mt-0.5">{mailbox.notes}</p>}
+                </div>
+                <StatusBadge status={mailbox.status} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <Dialog open={domainDialog} onOpenChange={setDomainDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -177,18 +227,24 @@ export const ClientHostingSection = ({ clientId }: { clientId: string }) => {
             <DialogDescription>Add a domain for this client.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
-            <div className="grid gap-1.5"><Label>Domain name *</Label><Input value={domainName} onChange={(e) => setDomainName(e.target.value)} placeholder="example.co.za" /></div>
-            <div className="grid gap-1.5"><Label>TLD</Label><Input value={domainTld} onChange={(e) => setDomainTld(e.target.value)} placeholder=".co.za" /></div>
+            <div className="grid gap-1.5">
+              <Label>Domain name *</Label>
+              <Input value={domainName} onChange={(event) => setDomainName(event.target.value)} placeholder="example.co.za" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>TLD</Label>
+              <Input value={domainTld} onChange={(event) => setDomainTld(event.target.value)} placeholder=".co.za" />
+            </div>
           </div>
           <DialogFooter>
             <Button onClick={handleAddDomain} disabled={saving || !domainName.trim()} size="sm">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null} Add Domain
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Add Domain
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Add Mailbox Dialog */}
       <Dialog open={mailboxDialog} onOpenChange={setMailboxDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -196,17 +252,20 @@ export const ClientHostingSection = ({ clientId }: { clientId: string }) => {
             <DialogDescription>Add an email mailbox for this client.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
-            <div className="grid gap-1.5"><Label>Email address *</Label><Input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="info@example.co.za" /></div>
+            <div className="grid gap-1.5">
+              <Label>Email address *</Label>
+              <Input value={emailAddress} onChange={(event) => setEmailAddress(event.target.value)} placeholder="info@example.co.za" />
+            </div>
           </div>
           <DialogFooter>
             <Button onClick={handleAddMailbox} disabled={saving || !emailAddress.trim()} size="sm">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null} Add Mailbox
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Add Mailbox
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Add Hosting Dialog */}
       <Dialog open={hostingDialog} onOpenChange={setHostingDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -214,11 +273,15 @@ export const ClientHostingSection = ({ clientId }: { clientId: string }) => {
             <DialogDescription>Create a new hosting account for this client.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
-            <div className="grid gap-1.5"><Label>cPanel username</Label><Input value={cpanelUsername} onChange={(e) => setCpanelUsername(e.target.value)} placeholder="username" /></div>
+            <div className="grid gap-1.5">
+              <Label>cPanel username</Label>
+              <Input value={cpanelUsername} onChange={(event) => setCpanelUsername(event.target.value)} placeholder="username" />
+            </div>
           </div>
           <DialogFooter>
             <Button onClick={handleAddHosting} disabled={saving} size="sm">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null} Add Account
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Add Account
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,22 +1,62 @@
 import { Link, useParams } from "react-router-dom";
 import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Globe, Mail, Phone, Building2, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Globe, Mail, Phone, Building2, ArrowRight, CheckCircle2, AlertCircle, Loader2, PauseCircle, PlayCircle } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useClient } from "@/hooks/useClients";
+import { useClientProjects } from "@/hooks/useSupabaseData";
 import { useWebsitesByClient } from "@/hooks/useWebsites";
+import { ClientServicesSection } from "@/components/clients/ClientServicesSection";
+import { ClientHostingSection } from "@/components/clients/ClientHostingSection";
 import { supabase } from "@/integrations/supabase/client";
 import { callInviteFunction } from "@/lib/inviteFunction";
+import { toast } from "@/hooks/use-toast";
 import type { DbClient } from "@/types/database";
 
 const ClientDetail = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const { data: client, isLoading, isError } = useClient(clientId);
   const { data: websites = [], isLoading: websitesLoading } = useWebsitesByClient(clientId);
+  const { data: projects = [], isLoading: projectsLoading } = useClientProjects(clientId);
+  const queryClient = useQueryClient();
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  const handleClientStatusChange = async (status: "active" | "inactive") => {
+    if (!client) return;
+
+    setUpdatingStatus(true);
+    const { error } = await supabase
+      .from("clients")
+      .update({ status })
+      .eq("id", client.id);
+    setUpdatingStatus(false);
+
+    if (error) {
+      toast({ title: "Status update failed", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    queryClient.setQueryData<DbClient | null>(["client", client.id], (current) =>
+      current ? { ...current, status } : current,
+    );
+    queryClient.setQueryData<DbClient[]>(["clients"], (current) =>
+      current?.map((item) => (item.id === client.id ? { ...item, status } : item)) ?? current,
+    );
+    queryClient.setQueryData<DbClient[]>(["clients", "by-business-name"], (current) =>
+      current?.map((item) => (item.id === client.id ? { ...item, status } : item)) ?? current,
+    );
+    queryClient.invalidateQueries({ queryKey: ["client", client.id] });
+    queryClient.invalidateQueries({ queryKey: ["clients"] });
+    queryClient.invalidateQueries({ queryKey: ["clients", "by-business-name"] });
+    toast({
+      title: status === "active" ? "Client activated" : "Client paused",
+      description: `${client.business_name} is now ${status}.`,
+    });
+  };
 
   return (
     <DashboardLayout>
@@ -60,7 +100,40 @@ const ClientDetail = () => {
                     </p>
                   )}
                 </div>
-                <StatusBadge status={client.status} />
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={client.status} />
+                  {client.status === "inactive" && (
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={updatingStatus}
+                      onClick={() => handleClientStatusChange("active")}
+                    >
+                      {updatingStatus ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <PlayCircle className="h-3.5 w-3.5" />
+                      )}
+                      Activate Client
+                    </Button>
+                  )}
+                  {client.status === "active" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 border-warning/40 hover:bg-warning/10"
+                      disabled={updatingStatus}
+                      onClick={() => handleClientStatusChange("inactive")}
+                    >
+                      {updatingStatus ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <PauseCircle className="h-3.5 w-3.5" />
+                      )}
+                      Pause Client
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -173,6 +246,64 @@ const ClientDetail = () => {
                 </ul>
               )}
             </section>
+
+            <ClientServicesSection clientId={client.id} />
+
+            <section className="rounded-xl border border-border bg-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-heading font-semibold text-foreground">
+                    Projects
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Projects are linked to this existing client record by client_id.
+                  </p>
+                </div>
+              </div>
+
+              {projectsLoading && (
+                <div className="text-sm text-muted-foreground">Loading projects...</div>
+              )}
+
+              {!projectsLoading && projects.length === 0 && (
+                <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                  <p className="text-sm font-medium text-foreground">No linked projects yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    New projects should be linked to this client, not a duplicate client record.
+                  </p>
+                </div>
+              )}
+
+              {!projectsLoading && projects.length > 0 && (
+                <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+                  {projects.map((project) => (
+                    <li key={project.id}>
+                      <Link
+                        to={`/admin/projects/${project.id}`}
+                        className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {project.project_name || "Untitled project"}
+                          </p>
+                          {project.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                              {project.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <StatusBadge status={project.stage} />
+                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <ClientHostingSection clientId={client.id} />
           </>
         )}
       </div>

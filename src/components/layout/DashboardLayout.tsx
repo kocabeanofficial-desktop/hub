@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, FolderOpen, MessageSquare, FileText,
   Activity, Search, LogOut, Menu, X, Inbox, CheckSquare, Server, Upload,
+  RefreshCw,
 } from "lucide-react";
 import kocaBeanLogo from "@/assets/koca-bean-logo.png";
 
@@ -18,6 +19,7 @@ const adminNav = [
   { label: "SEO Tracking", path: "/admin/seo", icon: Search },
   { label: "Reports", path: "/admin/reports", icon: FileText },
   { label: "Hosting", path: "/admin/hosting", icon: Server },
+  { label: "Renewals", path: "/admin/renewals", icon: RefreshCw },
   { label: "Imports", path: "/admin/imports", icon: Upload },
   { label: "Activity Log", path: "/admin/activity", icon: Activity },
 ];
@@ -43,7 +45,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex min-h-screen bg-background">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 bg-foreground/30 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -51,7 +53,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto",
+        "fixed inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:z-auto",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Brand */}
@@ -111,7 +113,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex min-h-screen flex-col min-w-0">
         {/* Top bar */}
         <header className="flex items-center gap-4 px-4 sm:px-6 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
           <button className="lg:hidden text-muted-foreground hover:text-foreground transition-colors" onClick={() => setSidebarOpen(true)}>
@@ -124,7 +126,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto scrollbar-thin p-4 sm:p-6">
+        <main className="flex-1 p-4 sm:p-6">
           {children}
         </main>
       </div>

@@ -50,6 +50,7 @@ const STATUS_OPTIONS: { value: string; label: string; dot: string }[] = [
 ];
 
 type SortOption = "name-asc" | "name-desc" | "newest" | "oldest" | "business-asc";
+type BulkStatusAction = "activate" | "deactivate";
 
 const Clients = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -69,6 +70,11 @@ const Clients = () => {
   const [form, setForm] = useState<ClientFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [sendingInvite, setSendingInvite] = useState<string | null>(null);
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(() => new Set());
+  const [bulkAction, setBulkAction] = useState<BulkStatusAction | "">("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [applyingBulkAction, setApplyingBulkAction] = useState(false);
 
   const { data: clients = [], isLoading, isError, error } = useClients();
   const { data: projects = [] } = useProjects();
@@ -136,12 +142,54 @@ const Clients = () => {
   const isFilterActive = !!debouncedSearch || statusFilter !== "all" || sortBy !== "name-asc";
   const activeFilterCount =
     (debouncedSearch ? 1 : 0) + (statusFilter !== "all" ? 1 : 0) + (sortBy !== "name-asc" ? 1 : 0);
+  const visibleClientIds = useMemo(() => filtered.map((client) => client.id), [filtered]);
+  const selectedClients = useMemo(
+    () => clients.filter((client) => selectedClientIds.has(client.id)),
+    [clients, selectedClientIds],
+  );
+  const selectedVisibleCount = visibleClientIds.filter((id) => selectedClientIds.has(id)).length;
+  const allVisibleSelected = visibleClientIds.length > 0 && selectedVisibleCount === visibleClientIds.length;
+  const confirmationWord = bulkAction === "activate" ? "ACTIVATE" : "DEACTIVATE";
 
   const clearFilters = () => {
     setSearchInput("");
     setDebouncedSearch("");
     setStatusFilter("all");
     setSortBy("name-asc");
+  };
+
+  const toggleClientSelection = (clientId: string) => {
+    setSelectedClientIds((current) => {
+      const next = new Set(current);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
+  };
+
+  const toggleVisibleSelection = () => {
+    setSelectedClientIds((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) {
+        visibleClientIds.forEach((id) => next.delete(id));
+      } else {
+        visibleClientIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const openBulkConfirmation = () => {
+    if (!bulkAction || selectedClientIds.size === 0) {
+      toast({
+        title: "Select clients and an action",
+        description: "Choose at least one client and a bulk action before applying.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setConfirmText("");
+    setConfirmOpen(true);
   };
 
   const openCreate = () => {
@@ -251,6 +299,47 @@ const Clients = () => {
     } finally {
       setSendingInvite(null);
     }
+  };
+
+  const applyBulkStatusChange = async () => {
+    if (!bulkAction || confirmText !== confirmationWord || selectedClientIds.size === 0) return;
+
+    const ids = Array.from(selectedClientIds);
+    const status = bulkAction === "activate" ? "active" : "inactive";
+    setApplyingBulkAction(true);
+    const { error } = await supabase
+      .from("clients")
+      .update({ status })
+      .in("id", ids);
+    setApplyingBulkAction(false);
+
+    if (error) {
+      toast({ title: "Bulk status update failed", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    queryClient.setQueryData<DbClient[]>(["clients"], (current) =>
+      current?.map((item) => (ids.includes(item.id) ? { ...item, status } : item)) ?? current,
+    );
+    queryClient.setQueryData<DbClient[]>(["clients", "by-business-name"], (current) =>
+      current?.map((item) => (ids.includes(item.id) ? { ...item, status } : item)) ?? current,
+    );
+    ids.forEach((id) => {
+      queryClient.setQueryData<DbClient | null>(["client", id], (current) =>
+        current ? { ...current, status } : current,
+      );
+    });
+
+    toast({
+      title: status === "active" ? "Clients activated" : "Clients deactivated",
+      description: `${ids.length} client${ids.length === 1 ? "" : "s"} updated.`,
+    });
+    queryClient.invalidateQueries({ queryKey: ["clients"] });
+    queryClient.invalidateQueries({ queryKey: ["clients", "by-business-name"] });
+    setSelectedClientIds(new Set());
+    setBulkAction("");
+    setConfirmOpen(false);
+    setConfirmText("");
   };
 
   // ── Detail view ──
@@ -445,22 +534,70 @@ const Clients = () => {
         )}
 
         <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
+          <div className="px-4 py-3.5 border-b border-border bg-muted/20 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {selectedClients.length} selected
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Select visible clients, then apply a client status action.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <Select value={bulkAction} onValueChange={(value) => setBulkAction(value as BulkStatusAction)}>
+                <SelectTrigger className="w-full sm:w-[210px] h-10 rounded-xl bg-card text-sm">
+                  <SelectValue placeholder="Bulk action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="activate">Activate selected</SelectItem>
+                  <SelectItem value="deactivate">Deactivate selected</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                onClick={openBulkConfirmation}
+                disabled={!bulkAction || selectedClientIds.size === 0}
+                className="h-10"
+              >
+                Apply
+              </Button>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
+                  <th className="px-4 py-3 w-12">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all visible clients"
+                      checked={allVisibleSelected}
+                      disabled={visibleClientIds.length === 0}
+                      onChange={toggleVisibleSelection}
+                      className="h-4 w-4 rounded border-input accent-primary"
+                    />
+                  </th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Name</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden sm:table-cell">Email</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Phone</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Website</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Created</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 w-10"></th>
+                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider min-w-[130px]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((client) => (
                   <tr key={client.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3.5">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${client.business_name}`}
+                        checked={selectedClientIds.has(client.id)}
+                        onChange={() => toggleClientSelection(client.id)}
+                        className="h-4 w-4 rounded border-input accent-primary"
+                      />
+                    </td>
                     <td className="px-4 py-3.5">
                       <Link to={`/admin/clients/${client.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
                         {client.business_name}
@@ -476,7 +613,7 @@ const Clients = () => {
                     <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(client.created_at).toLocaleDateString("en-ZA")}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={client.status} /></td>
                     <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                         <Link
                           to={`/admin/clients/${client.id}`}
                           className="px-2.5 py-1 rounded-lg text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
@@ -517,6 +654,47 @@ const Clients = () => {
           )}
         </div>
       </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading font-bold">
+              {bulkAction === "activate" ? "Activate selected clients" : "Deactivate selected clients"}
+            </DialogTitle>
+            <DialogDescription>
+              This updates only the client status for {selectedClients.length} selected client
+              {selectedClients.length === 1 ? "" : "s"}. Services are not changed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              Type <span className="font-semibold text-foreground">{confirmationWord}</span> to confirm.
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="bulk-confirmation">Confirmation</Label>
+              <Input
+                id="bulk-confirmation"
+                value={confirmText}
+                onChange={(event) => setConfirmText(event.target.value)}
+                placeholder={confirmationWord}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={applyingBulkAction}>
+              Cancel
+            </Button>
+            <Button
+              onClick={applyBulkStatusChange}
+              disabled={confirmText !== confirmationWord || applyingBulkAction}
+            >
+              {applyingBulkAction && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+              {bulkAction === "activate" ? "Activate selected" : "Deactivate selected"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ClientFormDialog
         open={dialogOpen}

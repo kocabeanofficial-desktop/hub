@@ -118,11 +118,10 @@ export interface DbAutomationEvent {
 
 export interface DbService {
   id: string;
-  service_code: string;
+  code: string;
   name: string;
   category: string;
   description: string | null;
-  default_billing_type: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -131,11 +130,10 @@ export interface DbClientService {
   id: string;
   client_id: string;
   service_code: string;
+  status: string;
   is_active: boolean;
-  billing_type: string | null;
-  source: string | null;
-  started_at: string | null;
-  ended_at: string | null;
+  billing_cycle: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -144,10 +142,7 @@ export interface DbHostingAccount {
   id: string;
   client_id: string;
   cpanel_username: string | null;
-  package: string | null;
   status: string;
-  disk_used: string | null;
-  disk_limit: string | null;
   server: string | null;
   ip_address: string | null;
   notes: string | null;
@@ -176,8 +171,6 @@ export interface DbMailbox {
   client_id: string;
   email_address: string;
   status: string;
-  quota_used: string | null;
-  quota_limit: string | null;
   hosting_account_id: string | null;
   notes: string | null;
   created_at: string;

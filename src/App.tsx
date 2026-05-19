@@ -17,6 +17,8 @@ import TaskManager from "./pages/admin/TaskManager";
 import Hosting from "./pages/admin/Hosting";
 import ZohoImports from "./pages/admin/ZohoImports";
 import ActivityLog from "./pages/admin/ActivityLog";
+import Renewals from "./pages/admin/Renewals";
+import RenewalDetail from "./pages/admin/RenewalDetail";
 import WebsiteContent from "./pages/admin/WebsiteContent";
 import PageContentEditor from "./pages/admin/PageContentEditor";
 import ClientDashboard from "./pages/client/ClientDashboard";
@@ -24,6 +26,7 @@ import ClientProjects from "./pages/client/ClientProjects";
 import ClientWebsite from "./pages/client/ClientWebsite";
 import ClientSupport from "./pages/client/ClientSupport";
 import ClientReports from "./pages/client/ClientReports";
+import ClientRenewalDetail from "./pages/client/ClientRenewalDetail";
 import AcceptInvite from "./pages/AcceptInvite";
 import NotFound from "./pages/NotFound";
 
@@ -96,6 +99,8 @@ const App: React.FC = () => (
             <Route path="/admin/hosting" element={<ProtectedRoute role="admin"><Hosting /></ProtectedRoute>} />
             <Route path="/admin/imports" element={<ProtectedRoute role="admin"><ZohoImports /></ProtectedRoute>} />
             <Route path="/admin/activity" element={<ProtectedRoute role="admin"><ActivityLog /></ProtectedRoute>} />
+            <Route path="/admin/renewals" element={<ProtectedRoute role="admin"><Renewals /></ProtectedRoute>} />
+            <Route path="/admin/renewals/:renewalId" element={<ProtectedRoute role="admin"><RenewalDetail /></ProtectedRoute>} />
             <Route path="/admin/websites/:websiteId/content" element={<ProtectedRoute role="admin"><WebsiteContent /></ProtectedRoute>} />
             <Route path="/admin/websites/:websiteId/content/:pageId" element={<ProtectedRoute role="admin"><PageContentEditor /></ProtectedRoute>} />
             {/* Client routes — accessible to any authenticated user (admins included for testing) */}
@@ -104,6 +109,7 @@ const App: React.FC = () => (
             <Route path="/client/website" element={<ProtectedRoute><ClientWebsite /></ProtectedRoute>} />
             <Route path="/client/support" element={<ProtectedRoute><ClientSupport /></ProtectedRoute>} />
             <Route path="/client/reports" element={<ProtectedRoute><ClientReports /></ProtectedRoute>} />
+            <Route path="/client/renewals/:renewalId" element={<ProtectedRoute><ClientRenewalDetail /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

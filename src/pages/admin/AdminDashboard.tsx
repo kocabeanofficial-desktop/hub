@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useClients, useProjects, useIntakeSubmissions, useReports, useAutomationEvents, useTasks } from "@/hooks/useSupabaseData";
 import { useZohoMetrics, formatZAR } from "@/hooks/useZohoMetrics";
+import { useRenewalInvoices } from "@/hooks/useRenewals";
 import { Link } from "react-router-dom";
 
 const AdminDashboard = () => {
@@ -20,6 +21,7 @@ const AdminDashboard = () => {
   const { data: reports = [] } = useReports();
   const { data: activityEvents = [] } = useAutomationEvents();
   const { data: zoho } = useZohoMetrics();
+  const { data: renewals = [] } = useRenewalInvoices();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -45,6 +47,9 @@ const AdminDashboard = () => {
   const openEnquiries = enquiries.filter((e) => e.status === "new").length;
   const openSupport = tasks.filter((t) => t.status !== "closed").length;
   const pendingReports = reports.filter((r) => r.status !== "completed").length;
+  const today = new Date().toISOString().slice(0, 10);
+  const activeRenewals = renewals.filter((r) => r.status === "active").length;
+  const overdueRenewals = renewals.filter((r) => r.status === "overdue" || (r.status === "active" && r.renewal_date < today)).length;
 
   return (
     <DashboardLayout>
@@ -62,6 +67,18 @@ const AdminDashboard = () => {
           <StatCard title="Sites In Progress" value={websitesInProgress} icon={Globe} variant="info" />
           <StatCard title="Open Support" value={openSupport} icon={MessageSquare} variant="warning" />
           <StatCard title="Reports Pending" value={pendingReports} icon={FileText} variant="default" />
+          <StatCard title="Active Renewals" value={activeRenewals} icon={Wallet} variant="primary" />
+          <StatCard title="Overdue Renewals" value={overdueRenewals} icon={AlertTriangle} variant="warning" />
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-5 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-sm font-heading font-bold text-foreground">Invoice-to-Action Renewals</h2>
+            <p className="text-sm text-muted-foreground mt-1">Upload renewal invoices and activate reminder timelines.</p>
+          </div>
+          <Link to="/admin/renewals" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+            Manage renewals →
+          </Link>
         </div>
 
         {/* Finance metrics from Zoho imports */}
