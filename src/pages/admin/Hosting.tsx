@@ -86,9 +86,9 @@ const Hosting = () => {
                 <tr className="border-b border-border bg-muted/40">
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Client</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden sm:table-cell">cPanel User</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Package</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Server</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Disk Used</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">IP Address</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Created</th>
                 </tr>
               </thead>
@@ -97,9 +97,9 @@ const Hosting = () => {
                   <tr key={a.id} className="hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3.5 font-medium text-foreground">{clientMap[a.client_id] || "—"}</td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{a.cpanel_username || "—"}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{a.package || "—"}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{a.server || "—"}</td>
                     <td className="px-4 py-3.5"><StatusPill status={a.status} colorMap={hostingStatusColors} /></td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{a.disk_used || "—"}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{a.ip_address || "—"}</td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(a.created_at).toLocaleDateString("en-ZA")}</td>
                   </tr>
                 ))}
@@ -166,7 +166,7 @@ const Hosting = () => {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Email</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden sm:table-cell">Client</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Quota Used</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Notes</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Created</th>
                 </tr>
               </thead>
@@ -176,7 +176,7 @@ const Hosting = () => {
                     <td className="px-4 py-3.5 font-medium text-foreground">{m.email_address}</td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{clientMap[m.client_id] || "—"}</td>
                     <td className="px-4 py-3.5"><StatusBadge status={m.status} /></td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{m.quota_used || "—"}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{m.notes || "—"}</td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(m.created_at).toLocaleDateString("en-ZA")}</td>
                   </tr>
                 ))}

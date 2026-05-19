@@ -1,105 +1,181 @@
 import { useState } from "react";
-import { useServices, useClientServices } from "@/hooks/useSupabaseData";
-import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "@/hooks/use-toast";
+import { Loader2, PauseCircle, Plus } from "lucide-react";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel,
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/hooks/use-toast";
+import { useClientServices, useServices } from "@/hooks/useSupabaseData";
+import { supabase } from "@/integrations/supabase/client";
 import type { DbService } from "@/types/database";
 
 interface Props {
   clientId: string;
 }
 
+const DEFAULT_BILLING_CYCLE = "monthly";
+
 export const ClientServicesSection = ({ clientId }: Props) => {
   const { data: clientServices = [], isLoading } = useClientServices(clientId);
   const { data: services = [] } = useServices();
   const [open, setOpen] = useState(false);
   const [selectedCode, setSelectedCode] = useState("");
-  const [billingType, setBillingType] = useState("monthly");
+  const [billingCycle, setBillingCycle] = useState(DEFAULT_BILLING_CYCLE);
+  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pausingId, setPausingId] = useState<string | null>(null);
   const qc = useQueryClient();
 
-  const servicesByCategory = services.reduce<Record<string, DbService[]>>((acc, s) => {
-    const cat = s.category || "Other";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(s);
+  const activeClientServices = clientServices.filter(
+    (clientService) => clientService.is_active && clientService.status === "active",
+  );
+  const activeServiceCodes = new Set(activeClientServices.map((clientService) => clientService.service_code));
+  const inactiveByServiceCode = clientServices.reduce((map, clientService) => {
+    if ((!clientService.is_active || clientService.status !== "active") && !map.has(clientService.service_code)) {
+      map.set(clientService.service_code, clientService);
+    }
+    return map;
+  }, new Map<string, (typeof clientServices)[number]>());
+  const availableServices = services.filter(
+    (service) => service.is_active && !activeServiceCodes.has(service.code),
+  );
+
+  const servicesByCategory = availableServices.reduce<Record<string, DbService[]>>((acc, service) => {
+    const category = service.category || "Other";
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(service);
     return acc;
   }, {});
 
   const getServiceName = (code: string) =>
-    services.find((s) => s.service_code === code)?.name || code;
+    services.find((service) => service.code === code)?.name || code;
 
   const getServiceCategory = (code: string) =>
-    services.find((s) => s.service_code === code)?.category || "";
+    services.find((service) => service.code === code)?.category || "";
+
+  const resetDialog = () => {
+    setSelectedCode("");
+    setBillingCycle(DEFAULT_BILLING_CYCLE);
+    setNotes("");
+  };
 
   const handleAdd = async () => {
     if (!selectedCode) return;
+
     setSaving(true);
-    const { error } = await supabase.from("client_services").insert({
+    const existing = inactiveByServiceCode.get(selectedCode);
+    const payload = {
       client_id: clientId,
       service_code: selectedCode,
+      status: "active",
       is_active: true,
-      billing_type: billingType,
-      source: "hub_admin",
-      started_at: new Date().toISOString(),
-    });
+      billing_cycle: billingCycle,
+      notes: notes.trim() || null,
+    };
+
+    const { error } = existing
+      ? await supabase.from("client_services").update(payload).eq("id", existing.id)
+      : await supabase.from("client_services").insert(payload);
     setSaving(false);
+
     if (error) {
-      toast({ title: "Failed to add service", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to activate service", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "Service added — tasks auto-generated" });
+
+    toast({ title: "Service activated" });
     qc.invalidateQueries({ queryKey: ["client_services", clientId] });
-    qc.invalidateQueries({ queryKey: ["tasks"] });
     setOpen(false);
-    setSelectedCode("");
-    setBillingType("monthly");
+    resetDialog();
+  };
+
+  const handlePause = async (id: string) => {
+    setPausingId(id);
+    const { error } = await supabase
+      .from("client_services")
+      .update({ is_active: false, status: "paused" })
+      .eq("id", id);
+    setPausingId(null);
+
+    if (error) {
+      toast({ title: "Failed to pause service", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    toast({ title: "Service paused" });
+    qc.invalidateQueries({ queryKey: ["client_services", clientId] });
   };
 
   return (
     <div className="bg-card rounded-2xl border border-border shadow-sm">
       <div className="px-4 py-3.5 border-b border-border flex items-center justify-between">
         <h3 className="text-sm font-heading font-bold text-foreground">
-          Services ({clientServices.length})
+          Active Services ({activeClientServices.length})
         </h3>
         <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="gap-1.5">
           <Plus className="h-3.5 w-3.5" /> Add Service
         </Button>
       </div>
+
       <div className="divide-y divide-border">
-        {clientServices.map((cs) => (
-          <div key={cs.id} className="px-4 py-3.5 flex items-center justify-between">
+        {activeClientServices.map((clientService) => (
+          <div key={clientService.id} className="px-4 py-3.5 flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-foreground">{getServiceName(cs.service_code)}</p>
+              <p className="text-sm font-medium text-foreground">{getServiceName(clientService.service_code)}</p>
               <div className="flex items-center gap-2 mt-1">
-                <StatusBadge status={getServiceCategory(cs.service_code)} />
-                {cs.billing_type && (
-                  <span className="text-xs text-muted-foreground capitalize">{cs.billing_type}</span>
+                <StatusBadge status={getServiceCategory(clientService.service_code)} />
+                {clientService.billing_cycle && (
+                  <span className="text-xs text-muted-foreground capitalize">
+                    {clientService.billing_cycle.replace(/_/g, " ")}
+                  </span>
                 )}
               </div>
-            </div>
-            <div className="text-right">
-              <StatusBadge status={cs.is_active ? "active" : "inactive"} />
-              {cs.started_at && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {new Date(cs.started_at).toLocaleDateString("en-ZA")}
-                </p>
+              {clientService.notes && (
+                <p className="text-xs text-muted-foreground mt-1 max-w-xl">{clientService.notes}</p>
               )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <StatusBadge status={clientService.status} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePause(clientService.id)}
+                disabled={pausingId === clientService.id}
+                className="gap-1.5"
+              >
+                {pausingId === clientService.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PauseCircle className="h-3.5 w-3.5" />
+                )}
+                Pause
+              </Button>
             </div>
           </div>
         ))}
-        {!isLoading && clientServices.length === 0 && (
-          <p className="px-4 py-6 text-sm text-muted-foreground text-center">No services assigned</p>
+
+        {!isLoading && activeClientServices.length === 0 && (
+          <p className="px-4 py-6 text-sm text-muted-foreground text-center">No active services assigned</p>
         )}
+
         {isLoading && (
           <div className="px-4 py-6 flex justify-center">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -107,43 +183,73 @@ export const ClientServicesSection = ({ clientId }: Props) => {
         )}
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) resetDialog();
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="font-heading font-bold">Add Service</DialogTitle>
-            <DialogDescription>Select a service and billing type to assign to this client.</DialogDescription>
+            <DialogDescription>
+              Select an available service and optional billing details for this client.
+            </DialogDescription>
           </DialogHeader>
+
           <div className="grid gap-4 py-2">
             <div className="grid gap-1.5">
               <Label>Service</Label>
               <Select value={selectedCode} onValueChange={setSelectedCode}>
-                <SelectTrigger><SelectValue placeholder="Select a service" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a service" />
+                </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(servicesByCategory).map(([cat, svcs]) => (
-                    <SelectGroup key={cat}>
-                      <SelectLabel>{cat}</SelectLabel>
-                      {svcs.map((s) => (
-                        <SelectItem key={s.service_code} value={s.service_code}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
+                  {Object.entries(servicesByCategory).length > 0 ? (
+                    Object.entries(servicesByCategory).map(([category, categoryServices]) => (
+                      <SelectGroup key={category}>
+                        <SelectLabel>{category}</SelectLabel>
+                        {categoryServices.map((service) => (
+                          <SelectItem key={service.code} value={service.code}>
+                            {service.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>No available services</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
+
             <div className="grid gap-1.5">
-              <Label>Billing Type</Label>
-              <Select value={billingType} onValueChange={setBillingType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Label>Billing Cycle</Label>
+              <Select value={billingCycle} onValueChange={setBillingCycle}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="once-off">Once-off</SelectItem>
+                  <SelectItem value="once_off">Once-off</SelectItem>
                   <SelectItem value="annual">Annual</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="service-notes">Notes</Label>
+              <Textarea
+                id="service-notes"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Optional service notes..."
+                rows={3}
+              />
+            </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button onClick={handleAdd} disabled={!selectedCode || saving}>
