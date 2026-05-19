@@ -88,6 +88,7 @@ export interface DbIntakeSubmission {
   raw_payload: Record<string, unknown>;
   status: string;
   processing_notes: string | null;
+  additional_notes: string | null;
   campaign: string | null;
   campaign_data: Record<string, unknown> | null;
   trade: string | null;

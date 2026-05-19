@@ -36,9 +36,20 @@ const SOURCE_COLORS: Record<string, string> = {
   website: "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300",
 };
 
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+
+const asString = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value : null;
+
 export function IceboxDetailModal({ submission, onClose, onActivate, onReject, onWhatsApp, activating, rejecting }: Props) {
   const [jsonOpen, setJsonOpen] = useState(false);
   const s = submission;
+  const payload = asRecord(s?.raw_payload);
+  const payloadBody = asRecord(payload?.body);
+  const selectedPlan = asString(payloadBody?.selected_plan);
+  const sourceForm = asString(payloadBody?.source_form);
+  const rawDetails = payload && Object.keys(payload).length > 0 ? payload : s?.campaign_data;
 
   return (
     <Dialog open={!!s} onOpenChange={(open) => !open && onClose()}>
@@ -66,6 +77,8 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
               </span>
             </div>
             <Row label="Campaign" value={s.campaign} />
+            <Row label="Source Form" value={sourceForm} />
+            <Row label="Selected Plan" value={selectedPlan} />
 
             {/* Campaign-specific fields — only show non-null */}
             {(s.trade || s.domain_of_interest || s.current_website || s.contract_term || s.needs_logo !== null || s.project_type || s.preferred_date || s.preferred_time || s.estimated_timeline || s.service_type) && (
@@ -85,6 +98,7 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
             )}
 
             <Row label="Services" value={s.requested_services} />
+            <Row label="Additional Notes" value={s.additional_notes} />
             <Row label="Notes" value={s.processing_notes} />
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground font-medium w-40 shrink-0 text-xs uppercase tracking-wider">Status</span>
@@ -92,15 +106,15 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
             </div>
 
             {/* Raw JSON */}
-            {s.campaign_data && Object.keys(s.campaign_data).length > 0 && (
+            {rawDetails && Object.keys(rawDetails).length > 0 && (
               <Collapsible open={jsonOpen} onOpenChange={setJsonOpen}>
                 <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition pt-2">
                   <ChevronDown className={`h-3 w-3 transition-transform ${jsonOpen ? "rotate-180" : ""}`} />
-                  Raw campaign data
+                  Raw submission data
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <pre className="mt-2 bg-muted/50 rounded-lg p-3 text-xs overflow-auto max-h-48 text-foreground">
-                    {JSON.stringify(s.campaign_data, null, 2)}
+                    {JSON.stringify(rawDetails, null, 2)}
                   </pre>
                 </CollapsibleContent>
               </Collapsible>
