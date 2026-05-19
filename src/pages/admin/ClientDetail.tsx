@@ -12,6 +12,7 @@ import { useClientProjects } from "@/hooks/useSupabaseData";
 import { useWebsitesByClient } from "@/hooks/useWebsites";
 import { ClientServicesSection } from "@/components/clients/ClientServicesSection";
 import { ClientHostingSection } from "@/components/clients/ClientHostingSection";
+import { OriginalIntakeBriefSection } from "@/components/enquiries/OriginalIntakeBriefSection";
 import { supabase } from "@/integrations/supabase/client";
 import { callInviteFunction } from "@/lib/inviteFunction";
 import { toast } from "@/hooks/use-toast";
@@ -174,6 +175,7 @@ const ClientDetail = () => {
             </div>
 
             <ClientAccessSection client={client} />
+            <OriginalIntakeBriefSection clientId={client.id} />
 
             {/* Linked websites */}
             <section className="rounded-xl border border-border bg-card p-6">

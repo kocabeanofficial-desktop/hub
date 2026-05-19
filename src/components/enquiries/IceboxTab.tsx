@@ -15,6 +15,49 @@ const SOURCE_COLORS: Record<string, string> = {
   website: "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300",
 };
 
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+
+const asString = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value : null;
+
+const getPayloadBody = (submission: DbIntakeSubmission) => {
+  const payload = asRecord(submission.raw_payload);
+  return asRecord(payload?.body) || payload;
+};
+
+const joinArray = (value: unknown) => Array.isArray(value) ? value.filter(Boolean).join(", ") : "";
+
+const buildOriginalBriefNotes = (submission: DbIntakeSubmission) => {
+  const body = getPayloadBody(submission);
+  const rawBrief = asRecord(body?.raw_payload);
+  const selectedPlan = asString(body?.selected_plan) || asString(rawBrief?.selected_plan);
+  const packageType = asString(body?.package_type) || asString(rawBrief?.package_type);
+  const setupFee = asString(body?.setup_fee) || asString(rawBrief?.setup_fee);
+  const monthlyFee = asString(body?.monthly_fee) || asString(rawBrief?.monthly_fee);
+  const businessOverview = asRecord(body?.business_overview) || asRecord(rawBrief?.business_overview);
+  const websiteGoals = asRecord(body?.website_goals) || asRecord(rawBrief?.website_goals);
+  const pagesNeeded = asRecord(body?.pages_needed) || asRecord(rawBrief?.pages_needed);
+  const timeline = asRecord(body?.timeline) || asRecord(rawBrief?.timeline);
+
+  const summaryLines = [
+    "Original Smart Website Setup Brief",
+    selectedPlan ? `Selected plan: ${selectedPlan}` : null,
+    packageType ? `Package type: ${packageType}` : null,
+    setupFee ? `Setup fee: ${setupFee}` : null,
+    monthlyFee ? `Monthly fee: ${monthlyFee}` : null,
+    businessOverview?.industry ? `Industry: ${businessOverview.industry}` : null,
+    businessOverview?.business_description ? `Business overview: ${businessOverview.business_description}` : null,
+    websiteGoals?.goals ? `Website goals: ${joinArray(websiteGoals.goals)}` : null,
+    websiteGoals?.main_visitor_action ? `Main visitor action: ${websiteGoals.main_visitor_action}` : null,
+    pagesNeeded?.pages ? `Pages needed: ${joinArray(pagesNeeded.pages)}` : null,
+    timeline?.start_timing ? `Start timing: ${timeline.start_timing}` : null,
+    timeline?.launch_deadline ? `Launch deadline: ${timeline.launch_deadline}` : null,
+  ].filter(Boolean);
+
+  return [summaryLines.join("\n"), submission.additional_notes].filter(Boolean).join("\n\n");
+};
+
 export function useIceboxCount() {
   return useQuery({
     queryKey: ["intake_submissions", "icebox_count"],
@@ -58,6 +101,15 @@ export function IceboxTab() {
   };
 
   const handleActivate = async (s: DbIntakeSubmission) => {
+    if (s.status === "activated" || s.client_id || s.project_id) {
+      toast({
+        title: "Already activated",
+        description: "This intake is already linked to a client or project. Refresh before trying again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setActivating(true);
     try {
       // Set to reviewing first
@@ -81,19 +133,28 @@ export function IceboxTab() {
       if (cErr) throw cErr;
 
       // Create project
-      const { error: pErr } = await supabase.from("projects").insert({
-        client_id: newClient.id,
-        project_name: (s.business_name || s.submitter_name || "New") + " Project",
-        project_type: s.source || "website_build",
-        stage: "intake",
-        priority: "normal",
-      });
+      const { data: newProject, error: pErr } = await supabase
+        .from("projects")
+        .insert({
+          client_id: newClient.id,
+          project_name: (s.business_name || s.submitter_name || "New") + " Project",
+          project_type: s.source || "website_build",
+          stage: "intake",
+          priority: "normal",
+          internal_notes: buildOriginalBriefNotes(s),
+        })
+        .select("id")
+        .single();
       if (pErr) throw pErr;
 
-      // Mark activated
+      // Mark activated and preserve the intake relationship
       const { error: uErr } = await supabase
         .from("intake_submissions")
-        .update({ status: "activated" })
+        .update({
+          status: "activated",
+          client_id: newClient.id,
+          project_id: newProject.id,
+        })
         .eq("id", s.id);
       if (uErr) throw uErr;
 

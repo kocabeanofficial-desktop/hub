@@ -1,6 +1,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { WebsiteBuildProgress } from "@/components/dashboard/WebsiteBuildProgress";
+import { OriginalIntakeBriefSection } from "@/components/enquiries/OriginalIntakeBriefSection";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -170,6 +171,8 @@ const Projects = () => {
               <p className="text-sm text-muted-foreground">{project.internal_notes || "No notes yet."}</p>
             </div>
           </div>
+
+          <OriginalIntakeBriefSection projectId={project.id} />
         </div>
 
         <ProjectFormDialog
