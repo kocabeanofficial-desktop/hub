@@ -123,9 +123,9 @@ export function IceboxTab() {
       const { data: newClient, error: cErr } = await supabase
         .from("clients")
         .insert({
-          business_name: s.business_name || s.submitter_name || "Unnamed",
-          phone: s.whatsapp_number || s.submitter_phone,
-          email: s.submitter_email,
+          business_name: s.business_name || s.full_name || "Unnamed",
+          phone: s.phone,
+          email: s.email,
           status: "active",
         })
         .select("id")
@@ -137,7 +137,7 @@ export function IceboxTab() {
         .from("projects")
         .insert({
           client_id: newClient.id,
-          project_name: (s.business_name || s.submitter_name || "New") + " Project",
+          project_name: (s.business_name || s.full_name || "New") + " Project",
           project_type: s.source || "website_build",
           stage: "intake",
           priority: "normal",
@@ -187,9 +187,9 @@ export function IceboxTab() {
   };
 
   const handleWhatsApp = (s: DbIntakeSubmission) => {
-    if (!s.whatsapp_number) return;
+    if (!s.phone) return;
     // Clean number: remove spaces, replace leading 0 with 27
-    let num = s.whatsapp_number.replace(/\s+/g, "").replace(/[^0-9+]/g, "");
+    let num = s.phone.replace(/\s+/g, "").replace(/[^0-9+]/g, "");
     if (num.startsWith("0")) {
       num = "27" + num.slice(1);
     }
@@ -230,7 +230,7 @@ export function IceboxTab() {
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="font-medium text-foreground text-sm">{s.submitter_name || "Unknown"}</p>
+                <p className="font-medium text-foreground text-sm">{s.full_name || "Unknown"}</p>
                 {s.business_name && (
                   <p className="text-xs text-muted-foreground">{s.business_name}</p>
                 )}
@@ -242,15 +242,15 @@ export function IceboxTab() {
               </span>
             </div>
 
-            {s.whatsapp_number && (
-              <p className="text-xs text-muted-foreground">📱 {s.whatsapp_number}</p>
+            {s.phone && (
+              <p className="text-xs text-muted-foreground">📱 {s.phone}</p>
             )}
 
             <div className="flex items-center justify-between mt-auto">
               <div className="flex items-center gap-2 flex-wrap">
-                {s.campaign && (
+                {s.source && (
                   <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
-                    {s.campaign}
+                    {s.source}
                   </span>
                 )}
                 <span className="text-[10px] text-muted-foreground">
