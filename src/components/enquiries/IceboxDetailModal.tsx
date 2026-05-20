@@ -62,10 +62,10 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
           <div className="space-y-3">
             {/* Contact */}
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contact</p>
-            <Row label="Name" value={s.submitter_name} />
-            <Row label="Email" value={s.submitter_email} />
-            <Row label="Phone" value={s.submitter_phone} />
-            <Row label="WhatsApp" value={s.whatsapp_number} />
+            <Row label="Name" value={s.full_name} />
+            <Row label="Email" value={s.email} />
+            <Row label="Phone" value={s.phone} />
+            <Row label="WhatsApp" value={s.phone} />
             <Row label="Business" value={s.business_name} />
 
             {/* Source & Campaign */}
@@ -132,7 +132,7 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
               {rejecting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
               Reject
             </Button>
-            {s.whatsapp_number && (
+            {s.phone && (
               <Button
                 variant="outline"
                 size="sm"
