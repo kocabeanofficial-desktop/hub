@@ -76,35 +76,75 @@ export interface DbReport {
 
 export interface DbIntakeSubmission {
   id: string;
+  // Contact info
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  preferred_contact: string | null;
+  business_name: string | null;
+  business_registration: string | null;
+  // Package / Pricing
+  selected_package: string | null;
+  setup_fee: string | null;
+  monthly_fee: string | null;
+  // Domain
+  domain_status: string | null;
+  existing_domain: string | null;
+  domain_provider: string | null;
+  domain_access: string | null;
+  preferred_domains: string | null;
+  // Business Info
+  industry: string | null;
+  operating_area: string | null;
+  business_overview: string | null;
+  ideal_customers: string | null;
+  customer_problem_solved: string | null;
+  trust_factors: string | null;
+  // Website Goals
+  website_goals: string | null;
+  main_visitor_action: string | null;
+  pages_needed: string | null;
+  main_services_products: string | null;
+  // Content & Assets
+  content_status: string | null;
+  logo_status: string | null;
+  brand_colours_status: string | null;
+  photos_status: string | null;
+  upload_note: string | null;
+  // Design Preferences
+  design_style: string | null;
+  website_examples_liked: string | null;
+  websites_disliked: string | null;
+  competitors: string | null;
+  features_needed: string | null;
+  // Email / Hosting
+  mailbox_count: string | null;
+  requested_email_addresses: string | null;
+  // Timeline
+  start_timing: string | null;
+  launch_deadline: string | null;
+  // Legacy / simple fields still in DB
+  business_type: string | null;
+  business_description: string | null;
+  has_logo: boolean | null;
+  logo_url: string | null;
+  has_domain: boolean | null;
+  domain_name: string | null;
+  needs_email: boolean | null;
+  website_goal: string | null;
+  selected_pages: string | null;
+  has_images: boolean | null;
+  // Notes & Metadata
+  final_notes: string | null;
+  additional_notes: string | null;
+  source: string | null;
+  raw_payload: Record<string, unknown> | null;
   client_id: string | null;
   project_id: string | null;
-  source: string;
-  submitter_name: string | null;
-  submitter_email: string | null;
-  submitter_phone: string | null;
-  whatsapp_number: string | null;
-  business_name: string | null;
-  requested_services: string | null;
-  raw_payload: Record<string, unknown>;
   status: string;
-  processing_notes: string | null;
-  additional_notes: string | null;
-  campaign: string | null;
-  campaign_data: Record<string, unknown> | null;
-  trade: string | null;
-  domain_of_interest: string | null;
-  contract_term: string | null;
-  needs_logo: boolean | null;
-  project_type: string | null;
-  preferred_date: string | null;
-  preferred_time: string | null;
-  estimated_timeline: string | null;
-  current_website: string | null;
-  service_type: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at: string | null;
 }
-
 export interface DbAutomationEvent {
   id: string;
   event_type: string;
