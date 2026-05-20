@@ -49,7 +49,7 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
   const payloadBody = asRecord(payload?.body);
   const selectedPlan = asString(payloadBody?.selected_plan);
   const sourceForm = asString(payloadBody?.source_form);
-  const rawDetails = payload && Object.keys(payload).length > 0 ? payload : s?.campaign_data;
+  const rawDetails = payload && Object.keys(payload).length > 0 ? payload : null;
 
   return (
     <Dialog open={!!s} onOpenChange={(open) => !open && onClose()}>
