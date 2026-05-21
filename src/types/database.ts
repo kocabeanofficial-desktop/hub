@@ -12,6 +12,8 @@ export interface DbClient {
   vat_number: string | null;
   notes: string | null;
   status: string;
+  client_origin?: string;
+  migration_status?: string;
   created_at: string;
   updated_at: string;
 }
@@ -216,4 +218,24 @@ export interface DbMailbox {
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DbClientRelationship {
+  id: string;
+  source_client_id: string;
+  related_client_id: string;
+  relationship_type: string;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbClientHistoryNote {
+  id: string;
+  client_id: string;
+  note_type: string;
+  note: string;
+  created_by: string | null;
+  created_at: string;
 }
