@@ -175,6 +175,8 @@ export interface DbClientService {
   service_code: string;
   status: string;
   is_active: boolean;
+  source: string | null;
+  started_at: string | null;
   billing_cycle: string | null;
   notes: string | null;
   created_at: string;

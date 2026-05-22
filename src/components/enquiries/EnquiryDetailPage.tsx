@@ -6,6 +6,7 @@ import { ArrowLeft, Copy, Check, Download, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import type { DbIntakeSubmission } from "@/types/database";
+import { projectNameForService, resolveServiceType } from "@/lib/serviceTypeConfig";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -283,6 +284,7 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
     queryClient.invalidateQueries({ queryKey: ["intake_submissions"] });
     queryClient.invalidateQueries({ queryKey: ["clients"] });
     queryClient.invalidateQueries({ queryKey: ["projects"] });
+    queryClient.invalidateQueries({ queryKey: ["client_services"] });
   };
 
   const handleStatusChange = async (newStatus: string) => {
@@ -299,10 +301,14 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
     }
     setConverting(true);
     try {
+      const { serviceType, config, usedFallback } = resolveServiceType(enq.service_type);
+      const businessName = field(enq, "business_name") || field(enq, "full_name") || "New Client";
+      const activationStartedAt = new Date().toISOString();
+
       const { data: client, error: ce } = await supabase
         .from("clients")
         .insert({
-          business_name: field(enq, "business_name") || field(enq, "full_name") || "New Client",
+          business_name: businessName,
           email: field(enq, "email"),
           phone: field(enq, "phone"),
           industry: field(enq, "industry", "business_overview.industry"),
@@ -314,28 +320,50 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
         .single();
       if (ce) throw ce;
 
-      const { data: project, error: pe } = await supabase
-        .from("projects")
+      const { error: serviceErr } = await supabase
+        .from("client_services")
         .insert({
           client_id: client.id,
-          project_name: `Website – ${field(enq, "business_name") || field(enq, "full_name") || "New"}`,
-          project_type: "website_build",
-          priority: "medium",
-          stage: "enquiry_received",
-          description: field(enq, "website_goals", "website_goals.goals", "website_goal"),
-        })
-        .select()
-        .single();
-      if (pe) throw pe;
+          service_code: serviceType,
+          is_active: true,
+          source: "enquiry_activation",
+          status: "active",
+          started_at: activationStartedAt,
+        });
+      if (serviceErr) throw serviceErr;
+
+      let projectId: string | null = null;
+
+      if (config.requiresProject && config.projectType) {
+        const { data: project, error: pe } = await supabase
+          .from("projects")
+          .insert({
+            client_id: client.id,
+            project_name: projectNameForService(serviceType, businessName),
+            project_type: config.projectType,
+            priority: "medium",
+            stage: "enquiry_received",
+            description: field(enq, "website_goals", "website_goals.goals", "website_goal"),
+          })
+          .select("id")
+          .single();
+        if (pe) throw pe;
+        projectId = project.id;
+      }
 
       await supabase
         .from("intake_submissions")
-        .update({ status: "activated", client_id: client.id, project_id: project.id })
+        .update({ status: "activated", client_id: client.id, project_id: projectId })
         .eq("id", enq.id);
 
       invalidate();
-      setEnq({ ...enq, status: "activated", client_id: client.id, project_id: project.id });
-      toast({ title: "Client & project created successfully" });
+      setEnq({ ...enq, status: "activated", client_id: client.id, project_id: projectId });
+      toast({
+        title: usedFallback ? "Client activated as General Enquiry" : "Client activated successfully",
+        description: config.requiresProject
+          ? `${config.label} project created.`
+          : `${config.label} service created. No project created.`,
+      });
     } catch (err: unknown) {
       toast({ title: (err as Error).message || "Failed to activate", variant: "destructive" });
     } finally {

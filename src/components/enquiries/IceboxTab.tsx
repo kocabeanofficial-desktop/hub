@@ -6,6 +6,7 @@ import { Eye, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IceboxDetailModal } from "./IceboxDetailModal";
 import type { DbIntakeSubmission } from "@/types/database";
+import { projectNameForService, resolveServiceType } from "@/lib/serviceTypeConfig";
 
 const SOURCE_COLORS: Record<string, string> = {
   managed_hosting: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
@@ -98,6 +99,7 @@ export function IceboxTab() {
     queryClient.invalidateQueries({ queryKey: ["intake_submissions"] });
     queryClient.invalidateQueries({ queryKey: ["clients"] });
     queryClient.invalidateQueries({ queryKey: ["projects"] });
+    queryClient.invalidateQueries({ queryKey: ["client_services"] });
   };
 
   const handleActivate = async (s: DbIntakeSubmission) => {
@@ -112,18 +114,15 @@ export function IceboxTab() {
 
     setActivating(true);
     try {
-      // Set to reviewing first
-      const { error: revErr } = await supabase
-        .from("intake_submissions")
-        .update({ status: "reviewing" })
-        .eq("id", s.id);
-      if (revErr) throw revErr;
+      const { serviceType, config, usedFallback } = resolveServiceType(s.service_type);
+      const businessName = s.business_name || s.full_name || "Unnamed";
+      const activationStartedAt = new Date().toISOString();
 
       // Create client
       const { data: newClient, error: cErr } = await supabase
         .from("clients")
         .insert({
-          business_name: s.business_name || s.full_name || "Unnamed",
+          business_name: businessName,
           phone: s.phone,
           email: s.email,
           status: "active",
@@ -132,20 +131,37 @@ export function IceboxTab() {
         .single();
       if (cErr) throw cErr;
 
-      // Create project
-      const { data: newProject, error: pErr } = await supabase
-        .from("projects")
+      const { error: serviceErr } = await supabase
+        .from("client_services")
         .insert({
           client_id: newClient.id,
-          project_name: (s.business_name || s.full_name || "New") + " Project",
-          project_type: s.source || "website_build",
-          stage: "intake",
-          priority: "normal",
-          internal_notes: buildOriginalBriefNotes(s),
-        })
-        .select("id")
-        .single();
-      if (pErr) throw pErr;
+          service_code: serviceType,
+          is_active: true,
+          source: "enquiry_activation",
+          status: "active",
+          started_at: activationStartedAt,
+        });
+      if (serviceErr) throw serviceErr;
+
+      let projectId: string | null = null;
+
+      if (config.requiresProject && config.projectType) {
+        const { data: newProject, error: pErr } = await supabase
+          .from("projects")
+          .insert({
+            client_id: newClient.id,
+            project_name: projectNameForService(serviceType, businessName),
+            project_type: config.projectType,
+            stage: "enquiry_received",
+            priority: "medium",
+            description: s.processing_notes || s.additional_notes,
+            internal_notes: buildOriginalBriefNotes(s),
+          })
+          .select("id")
+          .single();
+        if (pErr) throw pErr;
+        projectId = newProject.id;
+      }
 
       // Mark activated and preserve the intake relationship
       const { error: uErr } = await supabase
@@ -153,16 +169,25 @@ export function IceboxTab() {
         .update({
           status: "activated",
           client_id: newClient.id,
-          project_id: newProject.id,
+          project_id: projectId,
         })
         .eq("id", s.id);
       if (uErr) throw uErr;
 
       invalidate();
-      toast({ title: "Client activated successfully" });
+      toast({
+        title: usedFallback ? "Client activated as General Enquiry" : "Client activated successfully",
+        description: config.requiresProject
+          ? `${config.label} project created.`
+          : `${config.label} service created. No project created.`,
+      });
       setSelected(null);
-    } catch (err: any) {
-      toast({ title: "Activation failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({
+        title: "Activation failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setActivating(false);
     }
