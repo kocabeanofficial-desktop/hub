@@ -140,6 +140,7 @@ export interface DbIntakeSubmission {
   final_notes: string | null;
   additional_notes: string | null;
   source: string | null;
+  intake_bucket?: string | null;
   service_type?: string | null;
   campaign?: string | null;
   trade?: string | null;

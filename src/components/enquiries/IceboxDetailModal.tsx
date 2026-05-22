@@ -8,6 +8,7 @@ import { ChevronDown, Loader2, MessageCircle } from "lucide-react";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import type { DbIntakeSubmission } from "@/types/database";
 import { BUSINESS_EMAIL_PACKAGES, isBusinessEmailPackage, isEmailMigrationService } from "@/lib/serviceTypeConfig";
+import * as intakeReview from "@/lib/intakeReview";
 
 interface Props {
   submission: DbIntakeSubmission | null;
@@ -113,7 +114,7 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
   const s = submission;
   const payload = asRecord(s?.raw_payload);
   const payloadBody = asRecord(payload?.body);
-  const selectedPackage = s ? field(s, "selected_package", "selected_plan", "package_type") : "";
+  const selectedPackage = s ? intakeReview.getReviewField(s, "selected_package", "raw_payload.selected_plan", "raw_payload.body.selected_plan", "raw_payload.package_type", "raw_payload.body.package_type") : "";
   const sourceForm = asString(payloadBody?.source_form);
   const rawDetails = payload && Object.keys(payload).length > 0 ? payload : null;
   const isBusinessEmail = !!s && (isBusinessEmailPackage(selectedPackage) || field(s, "service_type") === "business_email");
@@ -131,11 +132,11 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
         {s && (
           <div className="space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contact</p>
-            <Row label="Name" value={field(s, "full_name", "name")} />
-            <Row label="Email" value={field(s, "email")} />
+            <Row label="Name" value={intakeReview.getContactFullName(s)} />
+            <Row label="Email" value={intakeReview.getContactEmail(s)} />
             <Row label="Phone" value={s.phone} />
-            <Row label="WhatsApp" value={field(s, "whatsapp_number", "phone") || s.phone} />
-            <Row label="Business" value={field(s, "business_name")} />
+            <Row label="WhatsApp" value={intakeReview.getContactPhone(s) || s.phone} />
+            <Row label="Business" value={intakeReview.getBusinessName(s)} />
 
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-2">Source & Campaign</p>
             <div className="flex items-start gap-2">
@@ -146,7 +147,7 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
             </div>
             <Row label="Campaign" value={s.campaign} />
             <Row label="Source Form" value={sourceForm} />
-            <Row label="Selected Plan" value={selectedPackage} />
+            <Row label="Selected Plan" value={intakeReview.displayLabel(selectedPackage)} />
 
             {(isBusinessEmail || isMigration) && (
               <>
@@ -157,10 +158,16 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
                   const value =
                     key === "package_label" && packageConfig ? packageConfig.label :
                     key === "mailbox_limit" && packageConfig ? String(packageConfig.mailboxLimit) :
-                    key === "package_price_monthly" && packageConfig ? String(packageConfig.monthlyPrice) :
+                    key === "package_price_monthly" && packageConfig ? intakeReview.formatMonthlyPrice(packageConfig.monthlyPrice) :
+                    key === "admin_contact_email" ? intakeReview.getAdminContactEmail(s) :
                     field(s, key);
                   if (key === "main_admin_mailbox" && !value) return null;
-                  return <Row key={key} label={label} value={value} />;
+                  const displayValue = key === "package_price_monthly"
+                    ? intakeReview.formatMonthlyPrice(value)
+                    : ["selected_package", "package_label", "domain_choice", "domain_access_status", "epp_auth_code_status", "domain_check_status", "old_emails_need_moving", "domain_login_access", "email_hosting_login_access"].includes(key)
+                      ? intakeReview.displayLabel(value)
+                      : value;
+                  return <Row key={key} label={label} value={displayValue} />;
                 })}
                 {field(s, "turnstile_token") && <Row label="Turnstile Token" value="Present" />}
                 <p className="text-sm text-muted-foreground pt-1">

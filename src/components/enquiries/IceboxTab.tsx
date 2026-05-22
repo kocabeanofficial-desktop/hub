@@ -13,6 +13,7 @@ import {
   projectNameForService,
   resolveServiceType,
 } from "@/lib/serviceTypeConfig";
+import * as intakeReview from "@/lib/intakeReview";
 
 const SOURCE_COLORS: Record<string, string> = {
   managed_hosting: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
@@ -59,7 +60,7 @@ const field = (submission: DbIntakeSubmission, key: string, ...paths: string[]) 
 };
 
 const serviceCodeFor = (submission: DbIntakeSubmission) => {
-  const selectedPackage = field(submission, "selected_package", "selected_plan", "package_type");
+  const selectedPackage = intakeReview.getReviewField(submission, "selected_package", "raw_payload.selected_plan", "raw_payload.body.selected_plan", "raw_payload.package_type", "raw_payload.body.package_type");
   if (isBusinessEmailPackage(selectedPackage)) return selectedPackage;
   if (isEmailMigrationService(field(submission, "service_type"), selectedPackage)) return EMAIL_MIGRATION_PACKAGE.selectedPackage;
   return field(submission, "service_type") || "general_enquiry";
@@ -151,7 +152,7 @@ export function IceboxTab() {
     setActivating(true);
     try {
       const { serviceType, config, usedFallback } = resolveServiceType(serviceCodeFor(s));
-      const businessName = field(s, "business_name") || field(s, "full_name", "name") || "Unnamed";
+      const businessName = intakeReview.getBusinessName(s) || intakeReview.getContactFullName(s) || "Unnamed";
       const activationStartedAt = new Date().toISOString();
 
       // Create client
@@ -159,8 +160,8 @@ export function IceboxTab() {
         .from("clients")
         .insert({
           business_name: businessName,
-          phone: field(s, "whatsapp_number", "phone") || s.phone,
-          email: field(s, "email", "admin_contact_email") || s.email,
+          phone: intakeReview.getContactPhone(s) || s.phone,
+          email: intakeReview.getAdminContactEmail(s) || intakeReview.getContactEmail(s) || s.email,
           website_url: field(s, "existing_domain", "desired_domain") || null,
           notes: field(s, "notes", "final_notes", "additional_notes") || null,
           status: "active",
@@ -294,9 +295,9 @@ export function IceboxTab() {
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="font-medium text-foreground text-sm">{s.full_name || "Unknown"}</p>
-                {s.business_name && (
-                  <p className="text-xs text-muted-foreground">{s.business_name}</p>
+                <p className="font-medium text-foreground text-sm">{intakeReview.getContactFullName(s) || "Unknown"}</p>
+                {intakeReview.getBusinessName(s) && (
+                  <p className="text-xs text-muted-foreground">{intakeReview.getBusinessName(s)}</p>
                 )}
               </div>
               <span

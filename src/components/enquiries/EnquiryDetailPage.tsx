@@ -15,8 +15,9 @@ import {
   projectNameForService,
   resolveServiceType,
 } from "@/lib/serviceTypeConfig";
+import * as intakeReview from "@/lib/intakeReview";
 
-type ReviewValues = Record<string, string>;
+type ReviewValues = intakeReview.IntakeReviewValues;
 
 const KNOWN_REVIEW_COLUMNS = new Set<keyof DbIntakeSubmission>([
   "full_name",
@@ -140,25 +141,7 @@ const serviceTypeFor = (values: ReviewValues, submission: DbIntakeSubmission) =>
 };
 
 const buildInitialReviewValues = (submission: DbIntakeSubmission): ReviewValues => {
-  const selectedPackage = field(submission, "selected_package", "selected_plan", "package_type");
-  const packageConfig = isBusinessEmailPackage(selectedPackage) ? BUSINESS_EMAIL_PACKAGES[selectedPackage] : null;
-  const values: ReviewValues = {
-    full_name: field(submission, "full_name", "name"),
-    business_name: field(submission, "business_name"),
-    email: field(submission, "email"),
-    whatsapp_number: field(submission, "whatsapp_number", "phone", "phone_number") || field(submission, "phone"),
-    selected_package: selectedPackage,
-    package_label: packageConfig?.label || packageLabel(selectedPackage),
-    mailbox_limit: field(submission, "mailbox_limit") || (packageConfig ? String(packageConfig.mailboxLimit) : ""),
-    package_price_monthly: field(submission, "package_price_monthly") || (packageConfig ? String(packageConfig.monthlyPrice) : ""),
-    notes: field(submission, "notes", "final_notes", "additional_notes") || submission.final_notes || submission.additional_notes || "",
-  };
-
-  [...BUSINESS_EMAIL_FIELDS, ...MIGRATION_FIELDS].forEach(([key]) => {
-    if (!values[key]) values[key] = field(submission, key);
-  });
-
-  return values;
+  return intakeReview.buildInitialEmailReviewValues(submission);
 };
 
 const Row = ({ label, value }: { label: string; value: string | null | undefined }) => {
@@ -228,6 +211,80 @@ const EditField = ({
   </label>
 );
 
+const SYSTEM_FIELD_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  domain_choice: [
+    { value: "new_domain", label: "New domain" },
+    { value: "existing_domain", label: "Existing domain" },
+    { value: "unsure", label: "Not sure / needs review" },
+  ],
+  domain_check_status: [
+    { value: "available", label: "Available" },
+    { value: "unavailable", label: "Appears unavailable" },
+    { value: "manual_review", label: "Manual review needed" },
+    { value: "pending_review", label: "Pending review" },
+  ],
+  domain_access_status: [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+    { value: "unsure", label: "Not sure" },
+    { value: "not_applicable", label: "Not applicable" },
+  ],
+  epp_auth_code_status: [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+    { value: "unsure", label: "Not sure" },
+    { value: "not_applicable", label: "Not applicable" },
+  ],
+  domain_login_access: [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+    { value: "unsure", label: "Not sure" },
+    { value: "not_applicable", label: "Not applicable" },
+  ],
+  email_hosting_login_access: [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+    { value: "unsure", label: "Not sure" },
+    { value: "not_applicable", label: "Not applicable" },
+  ],
+  old_emails_need_moving: [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+    { value: "unsure", label: "Not sure" },
+  ],
+};
+
+const SystemSelect = ({
+  label,
+  name,
+  value,
+  onChange,
+}: {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (name: string, value: string) => void;
+}) => {
+  const options = SYSTEM_FIELD_OPTIONS[name] || [];
+  const hasCurrentValue = value && !options.some((option) => option.value === value);
+  return (
+    <label className="grid gap-1.5 text-sm">
+      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
+      <select
+        value={value || ""}
+        onChange={(event) => onChange(name, event.target.value)}
+        className="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+      >
+        <option value="">Select value</option>
+        {hasCurrentValue && <option value={value}>{intakeReview.displayLabel(value)}</option>}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+};
+
 const PackageSelect = ({ value, onChange }: { value: string; onChange: (name: string, value: string) => void }) => (
   <label className="grid gap-1.5 text-sm">
     <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Selected Package</span>
@@ -273,55 +330,50 @@ const duplicateStatus = (
   return "no_match_found";
 };
 
-const formatStatus = (status: string) => status.replace(/_/g, " ");
+const formatStatus = (status: string) => intakeReview.displayLabel(status);
 
-const buildZohoCustomerCopy = (values: ReviewValues) => [
-  "ZOHO CUSTOMER PREPARATION",
-  "=".repeat(40),
-  `Customer Name: ${values.full_name}`,
-  `Company Name: ${values.business_name}`,
-  `Email: ${values.email || values.admin_contact_email}`,
-  `Phone / Mobile: ${values.whatsapp_number}`,
-  `Website / Domain: ${values.existing_domain || values.desired_domain}`,
-  "Currency: ZAR",
-  `Notes: ${values.notes}`,
-].filter((line) => !line.endsWith(": ")).join("\n");
+const buildZohoCustomerCopy = (values: ReviewValues) => {
+  const customer = intakeReview.getZohoCustomerValues(values);
+  return [
+    "ZOHO CUSTOMER PREPARATION",
+    "=".repeat(40),
+    `Customer Name: ${customer.customerName}`,
+    `Company Name: ${customer.companyName}`,
+    `Email: ${customer.email}`,
+    `Phone / Mobile: ${customer.phone}`,
+    `Website / Domain: ${customer.domain}`,
+    "Currency: ZAR",
+    `Notes: ${customer.notes}`,
+  ].filter((line) => !line.endsWith(": ")).join("\n");
+};
 
 const buildZohoInvoiceCopy = (values: ReviewValues, serviceType: string) => {
-  const isMigration = serviceType === EMAIL_MIGRATION_PACKAGE.selectedPackage;
-  const line = isMigration
-    ? "Email Migration & Setup - Review and manual setup service"
-    : `${values.package_label || packageLabel(values.selected_package)} - Monthly mailbox and domain management package`;
-
   return [
     "ZOHO INVOICE PREVIEW",
     "=".repeat(40),
-    `Invoice Line: ${line}`,
-    `Selected Package: ${values.selected_package}`,
-    `Monthly Price: ${values.package_price_monthly ? `R${values.package_price_monthly}` : ""}`,
+    `Invoice Line: ${intakeReview.invoiceLineFor(values, serviceType)}`,
+    `Selected Package: ${intakeReview.displayLabel(values.selected_package)}`,
+    `Monthly Price: ${intakeReview.formatMonthlyPrice(values.package_price_monthly)}`,
     `Mailbox Limit: ${values.mailbox_limit}`,
-    `Domain Note: ${values.domain_choice || values.existing_domain || values.desired_domain}`,
+    `Domain Note: ${intakeReview.buildDomainNote(values)}`,
   ].filter((lineItem) => !lineItem.endsWith(": ")).join("\n");
 };
 
 const updateRawPayloadWithReview = (submission: DbIntakeSubmission, values: ReviewValues) => {
-  const payload = asRecord(submission.raw_payload) ? { ...submission.raw_payload } : {};
-  const body = asRecord(payload.body) ? { ...(payload.body as Record<string, unknown>) } : { ...payload };
-  body.review_overrides = values;
-  if (!payload.body && Object.keys(payload).length > 0) return { body };
-  return { ...payload, body };
+  return intakeReview.updateRawPayloadWithReview(submission, values);
 };
 
 const downloadZohoCSV = (values: ReviewValues) => {
+  const customer = intakeReview.getZohoCustomerValues(values);
   const headers = ["Customer Name", "Company Name", "Email", "Phone / Mobile", "Website / Domain", "Currency Code", "Notes"];
   const row = [
-    values.full_name,
-    values.business_name,
-    values.email || values.admin_contact_email,
-    values.whatsapp_number,
-    values.existing_domain || values.desired_domain,
+    customer.customerName,
+    customer.companyName,
+    customer.email,
+    customer.phone,
+    customer.domain,
     "ZAR",
-    values.notes,
+    customer.notes,
   ];
   const escape = (value: string) => `"${(value || "").replace(/"/g, '""')}"`;
   const blob = new Blob([[headers.map(escape).join(","), row.map(escape).join(",")].join("\n")], { type: "text/csv" });
@@ -438,9 +490,9 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
         .from("clients")
         .insert({
           business_name: businessName,
-          email: values.email || values.admin_contact_email || null,
+          email: values.admin_contact_email || values.email || null,
           phone: values.whatsapp_number || null,
-          website_url: values.existing_domain || values.desired_domain || null,
+          website_url: intakeReview.getZohoCustomerValues(values).domain || null,
           notes: values.notes || null,
           status: "active",
         })
@@ -506,6 +558,10 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
 
   const serviceFields = isMigration ? MIGRATION_FIELDS : BUSINESS_EMAIL_FIELDS;
   const activationLabel = isEmailService ? "Activate - Create Client + Service" : "Activate - Create Client + Project";
+  const displayValueForKey = (key: string, value: string) =>
+    ["selected_package", "package_label", "domain_choice", "domain_access_status", "epp_auth_code_status", "domain_check_status", "old_emails_need_moving", "domain_login_access", "email_hosting_login_access"].includes(key)
+      ? intakeReview.displayLabel(value)
+      : value;
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -562,7 +618,9 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
           ))}
           <PackageSelect value={values.selected_package} onChange={updateValue} />
           {serviceFields.map(([name, label]) => (
-            name === "selected_package" ? null : (
+            name === "selected_package" ? null : SYSTEM_FIELD_OPTIONS[name] ? (
+              <SystemSelect key={name} name={name} label={label} value={values[name]} onChange={updateValue} />
+            ) : (
               <EditField
                 key={name}
                 name={name}
@@ -578,7 +636,7 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
 
       <SectionCard title={isMigration ? "Email Migration Details" : "Business Email Details"}>
         {serviceFields.map(([name, label]) => (
-          name === "main_admin_mailbox" && !values[name] ? null : <Row key={name} label={label} value={values[name]} />
+          name === "main_admin_mailbox" && !values[name] ? null : <Row key={name} label={label} value={displayValueForKey(name, values[name])} />
         ))}
         {field(enq, "turnstile_token") && <Row label="Turnstile Token" value="Present" />}
       </SectionCard>

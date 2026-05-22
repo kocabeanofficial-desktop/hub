@@ -12,6 +12,7 @@ import { useClients, useProjects, useIntakeSubmissions, useReports, useAutomatio
 import { useZohoMetrics, formatZAR } from "@/hooks/useZohoMetrics";
 import { useRenewalInvoices } from "@/hooks/useRenewals";
 import { Link } from "react-router-dom";
+import { displayLabel, getBusinessName, getContactFullName, isOpenIntakeStatus } from "@/lib/intakeReview";
 
 const AdminDashboard = () => {
   const { data: enquiries = [] } = useIntakeSubmissions();
@@ -44,7 +45,7 @@ const AdminDashboard = () => {
   const activeClients = clients.filter((c) => c.status === "active").length;
   const activeProjects = projects.length;
   const websitesInProgress = projects.filter((p) => p.stage !== "completed" && p.stage !== "live").length;
-  const openEnquiries = enquiries.filter((e) => e.status === "new").length;
+  const openEnquiries = enquiries.filter((e) => isOpenIntakeStatus(e.status, e.intake_bucket)).length;
   const openSupport = tasks.filter((t) => t.status !== "closed").length;
   const pendingReports = reports.filter((r) => r.status !== "completed").length;
   const today = new Date().toISOString().slice(0, 10);
@@ -151,8 +152,8 @@ const AdminDashboard = () => {
               {enquiries.slice(0, 3).map((enq) => (
                 <div key={enq.id} className="px-4 sm:px-5 py-3.5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{enq.full_name || enq.business_name || "Unknown"}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{enq.selected_package || enq.source || enq.source}</p>
+                    <p className="text-sm font-medium text-foreground">{getContactFullName(enq) || getBusinessName(enq) || "Unknown"}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{displayLabel(enq.selected_package) || enq.source || enq.source}</p>
                   </div>
                   <StatusBadge status={enq.status} />
                 </div>
