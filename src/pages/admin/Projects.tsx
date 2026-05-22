@@ -47,7 +47,18 @@ const emptyForm: ProjectFormData = {
   internal_notes: "",
 };
 
-const PROJECT_TYPES = ["website", "ecommerce", "branding", "seo", "social_media", "maintenance", "other"];
+const PROJECT_TYPES = [
+  "smart_website",
+  "smart_ecommerce",
+  "smart_system",
+  "website_build",
+  "website_redesign",
+  "ecommerce_build",
+  "booking_system",
+  "custom_web_app",
+  "existing_client_support",
+  "general_enquiry",
+];
 const STAGES = ["discovery", "design", "development", "review", "launch", "completed", "on_hold"];
 const PRIORITIES = ["low", "medium", "high", "urgent"];
 

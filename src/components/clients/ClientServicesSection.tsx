@@ -32,6 +32,28 @@ interface Props {
 }
 
 const DEFAULT_BILLING_CYCLE = "monthly";
+const CURRENT_SERVICE_CODES = new Set([
+  "business_email",
+  "business_email_5",
+  "business_email_10",
+  "business_email_30",
+  "email_migration",
+  "email_migration_setup",
+  "smart_website",
+  "website_build",
+  "website_redesign",
+  "smart_ecommerce",
+  "ecommerce_build",
+  "smart_system",
+  "advanced_web_system",
+  "custom_web_app",
+  "existing_client_support",
+  "support_request",
+  "billing_request",
+  "general_enquiry",
+  "seo",
+  "seo_management",
+]);
 
 export const ClientServicesSection = ({ clientId }: Props) => {
   const { data: clientServices = [], isLoading } = useClientServices(clientId);
@@ -55,7 +77,7 @@ export const ClientServicesSection = ({ clientId }: Props) => {
     return map;
   }, new Map<string, (typeof clientServices)[number]>());
   const availableServices = services.filter(
-    (service) => service.is_active && !activeServiceCodes.has(service.code),
+    (service) => service.is_active && CURRENT_SERVICE_CODES.has(service.code) && !activeServiceCodes.has(service.code),
   );
 
   const servicesByCategory = availableServices.reduce<Record<string, DbService[]>>((acc, service) => {

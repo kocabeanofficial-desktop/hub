@@ -36,6 +36,38 @@ export const SERVICE_TYPE_CONFIG = {
     projectType: "custom_web_app",
     projectNamePrefix: "Custom Web App",
   },
+  smart_website: {
+    label: "Smart Website",
+    requiresProject: true,
+    projectType: "smart_website",
+    projectNamePrefix: "Smart Website",
+  },
+  smart_ecommerce: {
+    label: "Smart Ecommerce",
+    requiresProject: true,
+    projectType: "smart_ecommerce",
+    projectNamePrefix: "Smart Ecommerce",
+  },
+  smart_system: {
+    label: "Smart System / Advanced Web System",
+    requiresProject: true,
+    projectType: "smart_system",
+    projectNamePrefix: "Smart System",
+  },
+  advanced_web_system: {
+    label: "Smart System / Advanced Web System",
+    requiresProject: true,
+    projectType: "advanced_web_system",
+    projectNamePrefix: "Advanced Web System",
+  },
+  business_email: {
+    label: "Business Email",
+    requiresProject: false,
+  },
+  email_migration: {
+    label: "Email Migration & Setup",
+    requiresProject: false,
+  },
   hosting_email: {
     label: "Hosting + Email Setup",
     requiresProject: false,
@@ -70,6 +102,10 @@ export const SERVICE_TYPE_CONFIG = {
   },
   existing_client_add_service: {
     label: "Existing Client - Add Service",
+    requiresProject: false,
+  },
+  existing_client_support: {
+    label: "Existing Client Support",
     requiresProject: false,
   },
   general_enquiry: {
