@@ -23,9 +23,53 @@ export const readPath = (source: Record<string, unknown> | null, path: string): 
   return asString(current) || joinArray(current);
 };
 
+export type PayloadValueResult = {
+  value: string;
+  path: string;
+};
+
 const directIntakeValue = (submission: DbIntakeSubmission, key: string) => {
   const direct = (submission as unknown as Record<string, unknown>)[key];
   return asString(direct) || joinArray(direct);
+};
+
+const valueFromSource = (source: Record<string, unknown> | null, sourcePath: string, key: string): PayloadValueResult | null => {
+  if (!source) return null;
+  const value = readPath(source, key);
+  return value ? { value, path: `${sourcePath}.${key}` } : null;
+};
+
+export const getPayloadValue = (submission: DbIntakeSubmission, keys: string[]): PayloadValueResult => {
+  const rawPayload = asRecord(submission.raw_payload);
+  const body = asRecord(rawPayload?.body);
+  const containers: { path: string; source: Record<string, unknown> | null }[] = [
+    { path: "intake", source: submission as unknown as Record<string, unknown> },
+    { path: "raw_payload", source: rawPayload },
+    { path: "raw_payload.body", source: body },
+    { path: "raw_payload.payload", source: asRecord(rawPayload?.payload) },
+    { path: "raw_payload.formData", source: asRecord(rawPayload?.formData) },
+    { path: "raw_payload.data", source: asRecord(rawPayload?.data) },
+    { path: "raw_payload.submission", source: asRecord(rawPayload?.submission) },
+    { path: "raw_payload.body.payload", source: asRecord(body?.payload) },
+    { path: "raw_payload.body.formData", source: asRecord(body?.formData) },
+    { path: "raw_payload.body.review_overrides", source: asRecord(body?.review_overrides) },
+    { path: "raw_payload.review_overrides", source: asRecord(rawPayload?.review_overrides) },
+    { path: "raw_payload.contact_details", source: asRecord(rawPayload?.contact_details) },
+    { path: "raw_payload.body.contact_details", source: asRecord(body?.contact_details) },
+    { path: "raw_payload.email_requirements", source: asRecord(rawPayload?.email_requirements) },
+    { path: "raw_payload.body.email_requirements", source: asRecord(body?.email_requirements) },
+    { path: "raw_payload.domain_details", source: asRecord(rawPayload?.domain_details) },
+    { path: "raw_payload.body.domain_details", source: asRecord(body?.domain_details) },
+  ];
+
+  for (const container of containers) {
+    for (const key of keys) {
+      const result = valueFromSource(container.source, container.path, key);
+      if (result) return result;
+    }
+  }
+
+  return { value: "", path: "" };
 };
 
 export const reviewValue = (submission: DbIntakeSubmission, paths: string[]): string => {
@@ -72,6 +116,9 @@ export const reviewValue = (submission: DbIntakeSubmission, paths: string[]): st
 };
 
 export const getReviewField = (submission: DbIntakeSubmission, key: string, ...fallbackPaths: string[]) => {
+  const payloadValue = getPayloadValue(submission, [key]).value;
+  if (payloadValue) return payloadValue;
+
   const standardPaths = [
     `review_overrides.${key}`,
     `raw_payload.body.review_overrides.${key}`,
@@ -86,85 +133,27 @@ export const getReviewField = (submission: DbIntakeSubmission, key: string, ...f
 };
 
 export const getContactFullName = (submission: DbIntakeSubmission) =>
-  reviewValue(submission, [
-    "review_overrides.full_name",
-    "raw_payload.body.review_overrides.full_name",
-    "intake.full_name",
-    "intake.contact_name",
-    "intake.name",
-    "raw_payload.full_name",
-    "raw_payload.name",
-    "raw_payload.contact_name",
-    "raw_payload.body.full_name",
-    "raw_payload.body.name",
-    "raw_payload.body.contact_name",
-    "raw_payload.formData.full_name",
-    "raw_payload.formData.name",
-    "raw_payload.payload.full_name",
-    "raw_payload.payload.name",
-  ]);
+  getPayloadValue(submission, ["full_name", "name", "contact_name", "client_name", "customer_name", "submitter_name"]).value;
 
 export const getContactEmail = (submission: DbIntakeSubmission) =>
-  reviewValue(submission, [
-    "review_overrides.email",
-    "raw_payload.body.review_overrides.email",
-    "intake.email",
-    "intake.contact_email",
-    "raw_payload.email",
-    "raw_payload.contact_email",
-    "raw_payload.body.email",
-    "raw_payload.body.contact_email",
-    "raw_payload.formData.email",
-    "raw_payload.formData.contact_email",
-    "raw_payload.payload.email",
-    "raw_payload.payload.contact_email",
-    "raw_payload.admin_contact_email",
-  ]);
+  getPayloadValue(submission, ["email", "contact_email", "client_email", "customer_email", "submitter_email"]).value;
 
 export const getContactPhone = (submission: DbIntakeSubmission) =>
-  reviewValue(submission, [
-    "review_overrides.whatsapp_number",
-    "raw_payload.body.review_overrides.whatsapp_number",
-    "intake.phone",
-    "intake.whatsapp_number",
-    "intake.whatsapp",
-    "raw_payload.whatsapp_number",
-    "raw_payload.phone",
-    "raw_payload.whatsapp",
-    "raw_payload.body.whatsapp_number",
-    "raw_payload.body.phone",
-    "raw_payload.body.whatsapp",
-    "raw_payload.formData.whatsapp_number",
-    "raw_payload.formData.phone",
-    "raw_payload.formData.whatsapp",
-    "raw_payload.payload.whatsapp_number",
-    "raw_payload.payload.phone",
-    "raw_payload.payload.whatsapp",
-  ]);
+  getPayloadValue(submission, ["whatsapp_number", "whatsapp", "phone", "mobile", "contact_number", "phone_number", "submitter_phone", "phone_whatsapp"]).value;
 
 export const getBusinessName = (submission: DbIntakeSubmission) =>
-  reviewValue(submission, [
-    "review_overrides.business_name",
-    "raw_payload.body.review_overrides.business_name",
-    "intake.business_name",
-    "raw_payload.business_name",
-    "raw_payload.body.business_name",
-    "raw_payload.formData.business_name",
-    "raw_payload.payload.business_name",
-  ]);
+  getPayloadValue(submission, ["business_name", "company_name", "company", "client_business_name"]).value;
 
 export const getAdminContactEmail = (submission: DbIntakeSubmission) =>
-  reviewValue(submission, [
-    "review_overrides.admin_contact_email",
-    "raw_payload.body.review_overrides.admin_contact_email",
-    "raw_payload.admin_contact_email",
-    "raw_payload.body.admin_contact_email",
-    "raw_payload.formData.admin_contact_email",
-    "raw_payload.payload.admin_contact_email",
-    "raw_payload.main_admin_mailbox",
-    "raw_payload.body.main_admin_mailbox",
-    "intake.email",
-  ]);
+  getPayloadValue(submission, ["admin_contact_email", "main_admin_mailbox", "account_email", "login_email"]).value;
+
+export const getDetectedContactSummary = (submission: DbIntakeSubmission) => [
+  { label: "Detected full name", ...getPayloadValue(submission, ["full_name", "name", "contact_name", "client_name", "customer_name", "submitter_name"]) },
+  { label: "Detected email", ...getPayloadValue(submission, ["email", "contact_email", "client_email", "customer_email", "submitter_email"]) },
+  { label: "Detected WhatsApp/phone", ...getPayloadValue(submission, ["whatsapp_number", "whatsapp", "phone", "mobile", "contact_number", "phone_number", "submitter_phone", "phone_whatsapp"]) },
+  { label: "Detected business name", ...getPayloadValue(submission, ["business_name", "company_name", "company", "client_business_name"]) },
+  { label: "Detected admin contact email", ...getPayloadValue(submission, ["admin_contact_email", "main_admin_mailbox", "account_email", "login_email"]) },
+];
 
 export const DISPLAY_LABELS: Record<string, string> = {
   new_domain: "New domain",
@@ -312,7 +301,7 @@ export const getZohoCustomerValues = (values: IntakeReviewValues) => {
   return {
     customerName: values.full_name,
     companyName: values.business_name,
-    email: values.admin_contact_email || values.email,
+    email: values.email || values.admin_contact_email,
     phone: values.whatsapp_number,
     domain,
     notes: buildZohoNotes(values),

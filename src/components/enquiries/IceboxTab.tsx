@@ -161,7 +161,7 @@ export function IceboxTab() {
         .insert({
           business_name: businessName,
           phone: intakeReview.getContactPhone(s) || s.phone,
-          email: intakeReview.getAdminContactEmail(s) || intakeReview.getContactEmail(s) || s.email,
+          email: intakeReview.getContactEmail(s) || intakeReview.getAdminContactEmail(s) || s.email,
           website_url: field(s, "existing_domain", "desired_domain") || null,
           notes: field(s, "notes", "final_notes", "additional_notes") || null,
           status: "active",

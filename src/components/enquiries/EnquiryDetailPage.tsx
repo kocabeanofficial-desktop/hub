@@ -490,7 +490,7 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
         .from("clients")
         .insert({
           business_name: businessName,
-          email: values.admin_contact_email || values.email || null,
+          email: values.email || values.admin_contact_email || null,
           phone: values.whatsapp_number || null,
           website_url: intakeReview.getZohoCustomerValues(values).domain || null,
           notes: values.notes || null,
@@ -680,6 +680,18 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
       )}
 
       <SectionCard title="Raw / Legacy Data">
+        <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Detected Contact Fields</p>
+          {intakeReview.getDetectedContactSummary(enq).map((item) => (
+            <div key={item.label} className="grid sm:grid-cols-[180px_1fr] gap-1 text-xs">
+              <span className="font-medium text-muted-foreground">{item.label}</span>
+              <span className="text-foreground">
+                {item.value || "Not found"}
+                {item.path ? <span className="text-muted-foreground"> ({item.path})</span> : null}
+              </span>
+            </div>
+          ))}
+        </div>
         <details>
           <summary className="text-xs text-muted-foreground cursor-pointer">Show raw payload, including legacy mailbox fields</summary>
           <pre className="text-xs font-mono mt-2 bg-muted/40 rounded-xl p-3 max-h-80 overflow-y-auto whitespace-pre-wrap">
