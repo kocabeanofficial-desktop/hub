@@ -6,7 +6,13 @@ import { Eye, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IceboxDetailModal } from "./IceboxDetailModal";
 import type { DbIntakeSubmission } from "@/types/database";
-import { projectNameForService, resolveServiceType } from "@/lib/serviceTypeConfig";
+import {
+  EMAIL_MIGRATION_PACKAGE,
+  isBusinessEmailPackage,
+  isEmailMigrationService,
+  projectNameForService,
+  resolveServiceType,
+} from "@/lib/serviceTypeConfig";
 
 const SOURCE_COLORS: Record<string, string> = {
   managed_hosting: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
@@ -28,6 +34,36 @@ const getPayloadBody = (submission: DbIntakeSubmission) => {
 };
 
 const joinArray = (value: unknown) => Array.isArray(value) ? value.filter(Boolean).join(", ") : "";
+
+const readPath = (source: Record<string, unknown> | null, path: string) => {
+  if (!source) return "";
+  let current: unknown = source;
+  for (const part of path.split(".")) current = asRecord(current)?.[part];
+  return asString(current) || joinArray(current);
+};
+
+const field = (submission: DbIntakeSubmission, key: string, ...paths: string[]) => {
+  const direct = (submission as unknown as Record<string, unknown>)[key];
+  if (asString(direct)) return asString(direct);
+  if (Array.isArray(direct)) return joinArray(direct);
+  const body = getPayloadBody(submission);
+  const rawBrief = asRecord(body?.raw_payload);
+  const reviewOverrides = asRecord(body?.review_overrides);
+  for (const source of [reviewOverrides, body, rawBrief]) {
+    for (const path of [key, ...paths]) {
+      const value = readPath(source, path);
+      if (value) return value;
+    }
+  }
+  return "";
+};
+
+const serviceCodeFor = (submission: DbIntakeSubmission) => {
+  const selectedPackage = field(submission, "selected_package", "selected_plan", "package_type");
+  if (isBusinessEmailPackage(selectedPackage)) return selectedPackage;
+  if (isEmailMigrationService(field(submission, "service_type"), selectedPackage)) return EMAIL_MIGRATION_PACKAGE.selectedPackage;
+  return field(submission, "service_type") || "general_enquiry";
+};
 
 const buildOriginalBriefNotes = (submission: DbIntakeSubmission) => {
   const body = getPayloadBody(submission);
@@ -114,8 +150,8 @@ export function IceboxTab() {
 
     setActivating(true);
     try {
-      const { serviceType, config, usedFallback } = resolveServiceType(s.service_type);
-      const businessName = s.business_name || s.full_name || "Unnamed";
+      const { serviceType, config, usedFallback } = resolveServiceType(serviceCodeFor(s));
+      const businessName = field(s, "business_name") || field(s, "full_name", "name") || "Unnamed";
       const activationStartedAt = new Date().toISOString();
 
       // Create client
@@ -123,8 +159,10 @@ export function IceboxTab() {
         .from("clients")
         .insert({
           business_name: businessName,
-          phone: s.phone,
-          email: s.email,
+          phone: field(s, "whatsapp_number", "phone") || s.phone,
+          email: field(s, "email", "admin_contact_email") || s.email,
+          website_url: field(s, "existing_domain", "desired_domain") || null,
+          notes: field(s, "notes", "final_notes", "additional_notes") || null,
           status: "active",
         })
         .select("id")
@@ -140,6 +178,7 @@ export function IceboxTab() {
           source: "enquiry_activation",
           status: "active",
           started_at: activationStartedAt,
+          billing_cycle: serviceType.startsWith("business_email") ? "monthly" : serviceType === EMAIL_MIGRATION_PACKAGE.selectedPackage ? "once_off" : null,
         });
       if (serviceErr) throw serviceErr;
 

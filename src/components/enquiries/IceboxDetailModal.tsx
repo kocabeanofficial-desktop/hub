@@ -1,12 +1,13 @@
+import { useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { Loader2, ChevronDown, MessageCircle } from "lucide-react";
+import { ChevronDown, Loader2, MessageCircle } from "lucide-react";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import type { DbIntakeSubmission } from "@/types/database";
-import { useState } from "react";
+import { BUSINESS_EMAIL_PACKAGES, isBusinessEmailPackage, isEmailMigrationService } from "@/lib/serviceTypeConfig";
 
 interface Props {
   submission: DbIntakeSubmission | null;
@@ -18,16 +19,6 @@ interface Props {
   rejecting: boolean;
 }
 
-const Row = ({ label, value }: { label: string; value: string | null | undefined }) => {
-  if (!value) return null;
-  return (
-    <div className="flex items-start gap-2">
-      <span className="text-muted-foreground font-medium w-40 shrink-0 text-xs uppercase tracking-wider">{label}</span>
-      <span className="text-foreground text-sm">{value}</span>
-    </div>
-  );
-};
-
 const SOURCE_COLORS: Record<string, string> = {
   managed_hosting: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   business_email: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
@@ -36,20 +27,99 @@ const SOURCE_COLORS: Record<string, string> = {
   website: "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300",
 };
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+const BUSINESS_EMAIL_FIELDS = [
+  ["selected_package", "Selected Package"],
+  ["package_label", "Package Label"],
+  ["mailbox_limit", "Mailbox Limit"],
+  ["package_price_monthly", "Monthly Price"],
+  ["domain_choice", "Domain Choice"],
+  ["desired_domain", "Desired Domain"],
+  ["existing_domain", "Existing Domain"],
+  ["domain_extension", "Domain Extension"],
+  ["domain_access_status", "Domain Access Status"],
+  ["epp_auth_code_status", "EPP/Auth Code Status"],
+  ["domain_check_status", "Domain Check Status"],
+  ["domain_check_message", "Domain Check Message"],
+  ["required_email_addresses", "Required Email Addresses"],
+  ["admin_contact_email", "Admin Contact Email"],
+  ["main_admin_mailbox", "Main Admin Mailbox"],
+  ["notes", "Notes"],
+] as const;
 
-const asString = (value: unknown): string | null =>
-  typeof value === "string" && value.trim() ? value : null;
+const MIGRATION_FIELDS = [
+  ["existing_domain", "Existing Domain"],
+  ["current_email_addresses", "Current Email Addresses"],
+  ["current_email_provider", "Current Email Provider"],
+  ["domain_login_access", "Domain Login Access"],
+  ["email_hosting_login_access", "Email Hosting Login Access"],
+  ["old_emails_need_moving", "Old Emails Need Moving"],
+  ["number_of_mailboxes_to_migrate", "Mailboxes To Migrate"],
+  ["number_of_devices_needing_setup", "Devices Needing Setup"],
+  ["current_issue", "Current Issue"],
+  ["preferred_migration_timing", "Preferred Migration Timing"],
+  ["admin_contact_email", "Admin Contact Email"],
+  ["email", "Email"],
+  ["whatsapp_number", "WhatsApp Number"],
+] as const;
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const asString = (value: unknown): string =>
+  typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
+
+const joinArray = (value: unknown) => Array.isArray(value) ? value.filter(Boolean).map(String).join(", ") : "";
+
+const getBody = (submission: DbIntakeSubmission) => {
+  const payload = asRecord(submission.raw_payload);
+  return asRecord(payload?.body) || payload || {};
+};
+
+const readPath = (source: Record<string, unknown> | null, path: string) => {
+  if (!source) return "";
+  let current: unknown = source;
+  for (const part of path.split(".")) current = asRecord(current)?.[part];
+  return asString(current) || joinArray(current);
+};
+
+const field = (submission: DbIntakeSubmission, key: string, ...paths: string[]) => {
+  const direct = (submission as unknown as Record<string, unknown>)[key];
+  if (asString(direct)) return asString(direct);
+  if (Array.isArray(direct)) return joinArray(direct);
+  const body = getBody(submission);
+  const rawBrief = asRecord(body.raw_payload);
+  const reviewOverrides = asRecord(body.review_overrides);
+  for (const source of [reviewOverrides, body, rawBrief]) {
+    for (const path of [key, ...paths]) {
+      const value = readPath(source, path);
+      if (value) return value;
+    }
+  }
+  return "";
+};
+
+const Row = ({ label, value }: { label: string; value: string | null | undefined }) => {
+  if (!value) return null;
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-muted-foreground font-medium w-40 shrink-0 text-xs uppercase tracking-wider">{label}</span>
+      <span className="text-foreground text-sm whitespace-pre-wrap">{value}</span>
+    </div>
+  );
+};
 
 export function IceboxDetailModal({ submission, onClose, onActivate, onReject, onWhatsApp, activating, rejecting }: Props) {
   const [jsonOpen, setJsonOpen] = useState(false);
   const s = submission;
   const payload = asRecord(s?.raw_payload);
   const payloadBody = asRecord(payload?.body);
-  const selectedPlan = asString(payloadBody?.selected_plan);
+  const selectedPackage = s ? field(s, "selected_package", "selected_plan", "package_type") : "";
   const sourceForm = asString(payloadBody?.source_form);
   const rawDetails = payload && Object.keys(payload).length > 0 ? payload : null;
+  const isBusinessEmail = !!s && (isBusinessEmailPackage(selectedPackage) || field(s, "service_type") === "business_email");
+  const isMigration = !!s && isEmailMigrationService(field(s, "service_type"), selectedPackage);
+  const packageConfig = isBusinessEmailPackage(selectedPackage) ? BUSINESS_EMAIL_PACKAGES[selectedPackage] : null;
+  const serviceFields = isMigration ? MIGRATION_FIELDS : BUSINESS_EMAIL_FIELDS;
 
   return (
     <Dialog open={!!s} onOpenChange={(open) => !open && onClose()}>
@@ -60,28 +130,46 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
         </DialogHeader>
         {s && (
           <div className="space-y-3">
-            {/* Contact */}
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contact</p>
-            <Row label="Name" value={s.full_name} />
-            <Row label="Email" value={s.email} />
+            <Row label="Name" value={field(s, "full_name", "name")} />
+            <Row label="Email" value={field(s, "email")} />
             <Row label="Phone" value={s.phone} />
-            <Row label="WhatsApp" value={s.phone} />
-            <Row label="Business" value={s.business_name} />
+            <Row label="WhatsApp" value={field(s, "whatsapp_number", "phone") || s.phone} />
+            <Row label="Business" value={field(s, "business_name")} />
 
-            {/* Source & Campaign */}
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-2">Source & Campaign</p>
             <div className="flex items-start gap-2">
               <span className="text-muted-foreground font-medium w-40 shrink-0 text-xs uppercase tracking-wider">Source</span>
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${SOURCE_COLORS[s.source] || "bg-muted text-muted-foreground"}`}>
-                {s.source.replace(/_/g, " ")}
+                {s.source?.replace(/_/g, " ") || "unknown"}
               </span>
             </div>
             <Row label="Campaign" value={s.campaign} />
             <Row label="Source Form" value={sourceForm} />
-            <Row label="Selected Plan" value={selectedPlan} />
+            <Row label="Selected Plan" value={selectedPackage} />
 
-            {/* Campaign-specific fields — only show non-null */}
-            {(s.trade || s.domain_of_interest || s.current_website || s.contract_term || s.needs_logo !== null || s.project_type || s.preferred_date || s.preferred_time || s.estimated_timeline || s.service_type) && (
+            {(isBusinessEmail || isMigration) && (
+              <>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-2">
+                  {isMigration ? "Email Migration Details" : "Business Email Details"}
+                </p>
+                {serviceFields.map(([key, label]) => {
+                  const value =
+                    key === "package_label" && packageConfig ? packageConfig.label :
+                    key === "mailbox_limit" && packageConfig ? String(packageConfig.mailboxLimit) :
+                    key === "package_price_monthly" && packageConfig ? String(packageConfig.monthlyPrice) :
+                    field(s, key);
+                  if (key === "main_admin_mailbox" && !value) return null;
+                  return <Row key={key} label={label} value={value} />;
+                })}
+                {field(s, "turnstile_token") && <Row label="Turnstile Token" value="Present" />}
+                <p className="text-sm text-muted-foreground pt-1">
+                  {isMigration ? "Not applicable for Email Migration service." : "Not applicable for Business Email service."}
+                </p>
+              </>
+            )}
+
+            {!isBusinessEmail && !isMigration && (s.trade || s.domain_of_interest || s.current_website || s.contract_term || s.needs_logo !== null || s.project_type || s.preferred_date || s.preferred_time || s.estimated_timeline || s.service_type) && (
               <>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-2">Campaign Details</p>
                 <Row label="Trade" value={s.trade} />
@@ -105,7 +193,6 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
               <StatusBadge status={s.status} />
             </div>
 
-            {/* Raw JSON */}
             {rawDetails && Object.keys(rawDetails).length > 0 && (
               <Collapsible open={jsonOpen} onOpenChange={setJsonOpen}>
                 <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition pt-2">
@@ -123,30 +210,17 @@ export function IceboxDetailModal({ submission, onClose, onActivate, onReject, o
         )}
         {s && s.status === "icebox" && (
           <DialogFooter className="gap-2 pt-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={rejecting || activating}
-              onClick={() => onReject(s)}
-            >
+            <Button variant="outline" size="sm" disabled={rejecting || activating} onClick={() => onReject(s)}>
               {rejecting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
               Reject
             </Button>
             {s.phone && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onWhatsApp(s)}
-              >
+              <Button variant="outline" size="sm" onClick={() => onWhatsApp(s)}>
                 <MessageCircle className="h-4 w-4 mr-1" />
                 WhatsApp
               </Button>
             )}
-            <Button
-              size="sm"
-              disabled={activating || rejecting}
-              onClick={() => onActivate(s)}
-            >
+            <Button size="sm" disabled={activating || rejecting} onClick={() => onActivate(s)}>
               {activating ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
               Activate Client
             </Button>

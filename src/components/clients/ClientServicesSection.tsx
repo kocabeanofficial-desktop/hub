@@ -34,9 +34,9 @@ interface Props {
 const DEFAULT_BILLING_CYCLE = "monthly";
 const CURRENT_SERVICE_CODES = new Set([
   "business_email",
-  "business_email_5",
   "business_email_10",
   "business_email_30",
+  "business_email_50",
   "email_migration",
   "email_migration_setup",
   "smart_website",

@@ -1,54 +1,185 @@
-import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Copy, Check, Download, AlertTriangle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Check, Copy, Download, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import type { DbIntakeSubmission } from "@/types/database";
-import { projectNameForService, resolveServiceType } from "@/lib/serviceTypeConfig";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import type { DbClient, DbIntakeSubmission } from "@/types/database";
+import {
+  BUSINESS_EMAIL_PACKAGES,
+  EMAIL_MIGRATION_PACKAGE,
+  isBusinessEmailPackage,
+  isEmailMigrationService,
+  packageLabel,
+  projectNameForService,
+  resolveServiceType,
+} from "@/lib/serviceTypeConfig";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+type ReviewValues = Record<string, string>;
 
-const asRecord = (v: unknown): Record<string, unknown> | null =>
-  v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+const KNOWN_REVIEW_COLUMNS = new Set<keyof DbIntakeSubmission>([
+  "full_name",
+  "business_name",
+  "email",
+  "phone",
+  "selected_package",
+  "existing_domain",
+  "final_notes",
+  "additional_notes",
+]);
 
-const asString = (v: unknown): string | null =>
-  typeof v === "string" && v.trim() ? v : null;
+const BUSINESS_EMAIL_FIELDS = [
+  ["selected_package", "Selected Package"],
+  ["package_label", "Package Label"],
+  ["mailbox_limit", "Mailbox Limit"],
+  ["package_price_monthly", "Monthly Price"],
+  ["domain_choice", "Domain Choice"],
+  ["desired_domain", "Desired Domain"],
+  ["existing_domain", "Existing Domain"],
+  ["domain_extension", "Domain Extension"],
+  ["domain_access_status", "Domain Access Status"],
+  ["epp_auth_code_status", "EPP/Auth Code Status"],
+  ["domain_check_status", "Domain Check Status"],
+  ["domain_check_message", "Domain Check Message"],
+  ["required_email_addresses", "Required Email Addresses"],
+  ["admin_contact_email", "Admin Contact Email"],
+  ["main_admin_mailbox", "Main Admin Mailbox"],
+  ["notes", "Notes"],
+] as const;
 
-const joinArr = (v: unknown): string =>
-  Array.isArray(v) ? (v as unknown[]).filter(Boolean).map(String).join(", ") : "";
+const MIGRATION_FIELDS = [
+  ["existing_domain", "Existing Domain"],
+  ["current_email_addresses", "Current Email Addresses"],
+  ["current_email_provider", "Current Email Provider"],
+  ["domain_login_access", "Domain Login Access"],
+  ["email_hosting_login_access", "Email Hosting Login Access"],
+  ["old_emails_need_moving", "Old Emails Need Moving"],
+  ["number_of_mailboxes_to_migrate", "Mailboxes To Migrate"],
+  ["number_of_devices_needing_setup", "Devices Needing Setup"],
+  ["current_issue", "Current Issue"],
+  ["preferred_migration_timing", "Preferred Migration Timing"],
+  ["admin_contact_email", "Admin Contact Email"],
+  ["email", "Email"],
+  ["whatsapp_number", "WhatsApp Number"],
+] as const;
 
-/** Extract the payload body from raw_payload (handles nested body wrapper) */
-const getPayloadBody = (s: DbIntakeSubmission): Record<string, unknown> => {
-  const payload = asRecord(s.raw_payload);
+const COMMON_EDIT_FIELDS = [
+  ["full_name", "Full Name"],
+  ["business_name", "Business Name"],
+  ["email", "Email"],
+  ["whatsapp_number", "WhatsApp Number"],
+] as const;
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const asString = (value: unknown): string =>
+  typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
+
+const joinArray = (value: unknown): string => (Array.isArray(value) ? value.filter(Boolean).map(String).join(", ") : "");
+
+const getPayloadBody = (submission: DbIntakeSubmission): Record<string, unknown> => {
+  const payload = asRecord(submission.raw_payload);
   return asRecord(payload?.body) || payload || {};
 };
 
-/** Read a field from dedicated column first, fallback to raw_payload */
-const field = (s: DbIntakeSubmission, col: keyof DbIntakeSubmission, ...payloadPaths: string[]): string => {
-  const direct = s[col];
-  if (typeof direct === "string" && direct.trim()) return direct;
-  if (typeof direct === "boolean") return direct ? "Yes" : "No";
-  if (typeof direct === "number") return String(direct);
-  const body = getPayloadBody(s);
-  const rawBrief = asRecord(body?.raw_payload);
-  for (const path of payloadPaths) {
-    const parts = path.split(".");
-    let cur: unknown = body;
-    for (const p of parts) cur = asRecord(cur)?.[p];
-    const v = asString(cur) || joinArr(cur);
-    if (v) return v;
-    // Also try rawBrief
-    let cur2: unknown = rawBrief;
-    for (const p of parts) cur2 = asRecord(cur2)?.[p];
-    const v2 = asString(cur2) || joinArr(cur2);
-    if (v2) return v2;
+const readPath = (source: Record<string, unknown> | null, path: string): string => {
+  if (!source) return "";
+  let current: unknown = source;
+  for (const part of path.split(".")) current = asRecord(current)?.[part];
+  return asString(current) || joinArray(current);
+};
+
+const rawValue = (submission: DbIntakeSubmission, key: string): string => {
+  const direct = (submission as unknown as Record<string, unknown>)[key];
+  if (asString(direct)) return asString(direct);
+  if (Array.isArray(direct)) return joinArray(direct);
+
+  const body = getPayloadBody(submission);
+  const rawBrief = asRecord(body.raw_payload);
+  const reviewOverrides = asRecord(body.review_overrides);
+  const paths = [
+    key,
+    `contact.${key}`,
+    `domain.${key}`,
+    `email_hosting.${key}`,
+    `business_email.${key}`,
+    `migration.${key}`,
+  ];
+
+  for (const source of [reviewOverrides, body, rawBrief]) {
+    for (const path of paths) {
+      const value = readPath(source, path);
+      if (value) return value;
+    }
   }
   return "";
 };
 
-// ─── Copy Button ─────────────────────────────────────────────────────────────
+const field = (submission: DbIntakeSubmission, key: string, ...fallbackPaths: string[]) => {
+  const direct = rawValue(submission, key);
+  if (direct) return direct;
+  const body = getPayloadBody(submission);
+  const rawBrief = asRecord(body.raw_payload);
+  for (const path of fallbackPaths) {
+    const value = readPath(body, path) || readPath(rawBrief, path);
+    if (value) return value;
+  }
+  return "";
+};
+
+const selectedPackageFor = (values: ReviewValues, submission: DbIntakeSubmission) =>
+  values.selected_package || field(submission, "selected_package", "selected_plan", "package_type");
+
+const serviceTypeFor = (values: ReviewValues, submission: DbIntakeSubmission) => {
+  const selectedPackage = selectedPackageFor(values, submission);
+  if (isBusinessEmailPackage(selectedPackage)) return selectedPackage;
+  if (isEmailMigrationService(field(submission, "service_type"), selectedPackage)) return EMAIL_MIGRATION_PACKAGE.selectedPackage;
+  return field(submission, "service_type") || "general_enquiry";
+};
+
+const buildInitialReviewValues = (submission: DbIntakeSubmission): ReviewValues => {
+  const selectedPackage = field(submission, "selected_package", "selected_plan", "package_type");
+  const packageConfig = isBusinessEmailPackage(selectedPackage) ? BUSINESS_EMAIL_PACKAGES[selectedPackage] : null;
+  const values: ReviewValues = {
+    full_name: field(submission, "full_name", "name"),
+    business_name: field(submission, "business_name"),
+    email: field(submission, "email"),
+    whatsapp_number: field(submission, "whatsapp_number", "phone", "phone_number") || field(submission, "phone"),
+    selected_package: selectedPackage,
+    package_label: packageConfig?.label || packageLabel(selectedPackage),
+    mailbox_limit: field(submission, "mailbox_limit") || (packageConfig ? String(packageConfig.mailboxLimit) : ""),
+    package_price_monthly: field(submission, "package_price_monthly") || (packageConfig ? String(packageConfig.monthlyPrice) : ""),
+    notes: field(submission, "notes", "final_notes", "additional_notes") || submission.final_notes || submission.additional_notes || "",
+  };
+
+  [...BUSINESS_EMAIL_FIELDS, ...MIGRATION_FIELDS].forEach(([key]) => {
+    if (!values[key]) values[key] = field(submission, key);
+  });
+
+  return values;
+};
+
+const Row = ({ label, value }: { label: string; value: string | null | undefined }) => {
+  if (!value) return null;
+  return (
+    <div className="flex items-start gap-2 text-sm">
+      <span className="w-48 shrink-0 text-muted-foreground font-medium">{label}</span>
+      <span className="text-foreground flex-1 whitespace-pre-wrap">{value}</span>
+    </div>
+  );
+};
+
+const SectionCard = ({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) => (
+  <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{title}</p>
+      {action}
+    </div>
+    <div className="p-4 space-y-3">{children}</div>
+  </div>
+);
 
 const CopyButton = ({ text, label = "Copy" }: { text: string; label?: string }) => {
   const [copied, setCopied] = useState(false);
@@ -60,214 +191,147 @@ const CopyButton = ({ text, label = "Copy" }: { text: string; label?: string }) 
   return (
     <Button size="sm" variant="outline" onClick={handleCopy} className="gap-1.5 text-xs rounded-xl">
       {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-      {copied ? "Copied!" : label}
+      {copied ? "Copied" : label}
     </Button>
   );
 };
 
-// ─── Section Card ─────────────────────────────────────────────────────────────
-
-const SectionCard = ({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) => (
-  <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{title}</p>
-      {action}
-    </div>
-    <div className="p-4 space-y-2">{children}</div>
-  </div>
+const EditField = ({
+  label,
+  name,
+  value,
+  onChange,
+  multiline = false,
+}: {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (name: string, value: string) => void;
+  multiline?: boolean;
+}) => (
+  <label className="grid gap-1.5 text-sm">
+    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
+    {multiline ? (
+      <textarea
+        value={value || ""}
+        onChange={(event) => onChange(name, event.target.value)}
+        rows={3}
+        className="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+      />
+    ) : (
+      <input
+        value={value || ""}
+        onChange={(event) => onChange(name, event.target.value)}
+        className="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+      />
+    )}
+  </label>
 );
 
-const Row = ({ label, value }: { label: string; value: string | null | undefined }) => {
-  if (!value) return null;
-  return (
-    <div className="flex items-start gap-2 text-sm">
-      <span className="w-44 shrink-0 text-muted-foreground font-medium">{label}</span>
-      <span className="text-foreground flex-1 whitespace-pre-wrap">{value}</span>
-    </div>
-  );
+const PackageSelect = ({ value, onChange }: { value: string; onChange: (name: string, value: string) => void }) => (
+  <label className="grid gap-1.5 text-sm">
+    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Selected Package</span>
+    <select
+      value={value || ""}
+      onChange={(event) => {
+        const next = event.target.value;
+        onChange("selected_package", next);
+        if (isBusinessEmailPackage(next)) {
+          const config = BUSINESS_EMAIL_PACKAGES[next];
+          onChange("package_label", config.label);
+          onChange("mailbox_limit", String(config.mailboxLimit));
+          onChange("package_price_monthly", String(config.monthlyPrice));
+        }
+      }}
+      className="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+    >
+      <option value="">Select package</option>
+      {Object.entries(BUSINESS_EMAIL_PACKAGES).map(([code, config]) => (
+        <option key={code} value={code}>{config.label}</option>
+      ))}
+      <option value={EMAIL_MIGRATION_PACKAGE.selectedPackage}>{EMAIL_MIGRATION_PACKAGE.label}</option>
+    </select>
+  </label>
+);
+
+const duplicateStatus = (
+  values: ReviewValues,
+  submission: DbIntakeSubmission,
+  clients: DbClient[],
+  submissions: DbIntakeSubmission[],
+) => {
+  const emails = [values.email, values.admin_contact_email].filter(Boolean).map((value) => value.toLowerCase().trim());
+  if (emails.length === 0) return "manual_review_needed";
+  const clientMatch = clients.some((client) => client.email && emails.includes(client.email.toLowerCase().trim()));
+  if (clientMatch) return "possible_existing_client";
+  const pendingMatch = submissions.some((item) => {
+    if (item.id === submission.id || item.status === "activated" || item.status === "rejected") return false;
+    const itemEmails = [item.email, rawValue(item, "admin_contact_email")].filter(Boolean).map((value) => value.toLowerCase().trim());
+    return itemEmails.some((email) => emails.includes(email));
+  });
+  if (pendingMatch) return "existing_pending_enquiry";
+  return "no_match_found";
 };
 
-// ─── Brief Builder ────────────────────────────────────────────────────────────
+const formatStatus = (status: string) => status.replace(/_/g, " ");
 
-const buildWebsiteBrief = (s: DbIntakeSubmission): string => {
-  const lines: string[] = [
-    "SMART WEBSITE SETUP BRIEF",
+const buildZohoCustomerCopy = (values: ReviewValues) => [
+  "ZOHO CUSTOMER PREPARATION",
+  "=".repeat(40),
+  `Customer Name: ${values.full_name}`,
+  `Company Name: ${values.business_name}`,
+  `Email: ${values.email || values.admin_contact_email}`,
+  `Phone / Mobile: ${values.whatsapp_number}`,
+  `Website / Domain: ${values.existing_domain || values.desired_domain}`,
+  "Currency: ZAR",
+  `Notes: ${values.notes}`,
+].filter((line) => !line.endsWith(": ")).join("\n");
+
+const buildZohoInvoiceCopy = (values: ReviewValues, serviceType: string) => {
+  const isMigration = serviceType === EMAIL_MIGRATION_PACKAGE.selectedPackage;
+  const line = isMigration
+    ? "Email Migration & Setup - Review and manual setup service"
+    : `${values.package_label || packageLabel(values.selected_package)} - Monthly mailbox and domain management package`;
+
+  return [
+    "ZOHO INVOICE PREVIEW",
     "=".repeat(40),
-    "",
-    "CLIENT INFORMATION",
-    `Name: ${field(s, "full_name", "name", "full_name")}`,
-    `Business: ${field(s, "business_name", "business_name")}`,
-    `Email: ${field(s, "email", "email")}`,
-    `Phone: ${field(s, "phone", "phone")}`,
-    `Preferred Contact: ${field(s, "preferred_contact", "preferred_contact", "contact.preferred_contact")}`,
-    `Business Registration: ${field(s, "business_registration", "business_registration")}`,
-    "",
-    "PACKAGE",
-    `Selected Package: ${field(s, "selected_package", "selected_plan", "package_type")}`,
-    `Setup Fee: ${field(s, "setup_fee", "setup_fee")}`,
-    `Monthly Fee: ${field(s, "monthly_fee", "monthly_fee")}`,
-    "",
-    "DOMAIN",
-    `Domain Status: ${field(s, "domain_status", "domain.domain_status", "domain_status")}`,
-    `Existing Domain: ${field(s, "existing_domain", "domain.existing_domain", "existing_domain") || field(s, "domain_name", "domain_name")}`,
-    `Domain Provider: ${field(s, "domain_provider", "domain.domain_provider")}`,
-    `Domain Access: ${field(s, "domain_access", "domain.domain_access")}`,
-    `Preferred Domains: ${field(s, "preferred_domains", "domain.preferred_domains")}`,
-    "",
-    "BUSINESS OVERVIEW",
-    `Industry: ${field(s, "industry", "business_overview.industry", "industry")}`,
-    `Operating Area: ${field(s, "operating_area", "business_overview.operating_area")}`,
-    `Business Overview: ${field(s, "business_overview", "business_overview.business_description", "business_description")}`,
-    `Ideal Customers: ${field(s, "ideal_customers", "business_overview.ideal_customers")}`,
-    `Customer Problem Solved: ${field(s, "customer_problem_solved", "business_overview.customer_problem_solved")}`,
-    `Trust Factors: ${field(s, "trust_factors", "business_overview.trust_factors")}`,
-    "",
-    "WEBSITE GOALS",
-    `Website Goals: ${field(s, "website_goals", "website_goals.goals", "website_goal")}`,
-    `Main Visitor Action: ${field(s, "main_visitor_action", "website_goals.main_visitor_action")}`,
-    `Pages Needed: ${field(s, "pages_needed", "pages_needed.pages", "selected_pages")}`,
-    `Main Services/Products: ${field(s, "main_services_products", "website_goals.main_services_products")}`,
-    "",
-    "CONTENT & ASSETS",
-    `Content Status: ${field(s, "content_status", "content_assets.content_status")}`,
-    `Logo Status: ${field(s, "logo_status", "content_assets.logo_status")} ${s.has_logo ? "(Has logo)" : ""}`,
-    `Brand Colours: ${field(s, "brand_colours_status", "content_assets.brand_colours_status")}`,
-    `Photos/Images: ${field(s, "photos_status", "content_assets.photos_status")} ${s.has_images ? "(Has images)" : ""}`,
-    `Upload Note: ${field(s, "upload_note", "content_assets.upload_note")}`,
-    "",
-    "DESIGN PREFERENCES",
-    `Design Style: ${field(s, "design_style", "design_preferences.design_style")}`,
-    `Websites Liked: ${field(s, "website_examples_liked", "design_preferences.website_examples_liked")}`,
-    `Websites Disliked: ${field(s, "websites_disliked", "design_preferences.websites_disliked")}`,
-    `Competitors: ${field(s, "competitors", "design_preferences.competitors")}`,
-    `Features Needed: ${field(s, "features_needed", "design_preferences.features_needed")}`,
-    "",
-    "EMAIL / HOSTING",
-    `Mailbox Count: ${field(s, "mailbox_count", "email_hosting.mailbox_count")} ${s.needs_email ? "(Email needed)" : ""}`,
-    `Requested Email Addresses: ${field(s, "requested_email_addresses", "email_hosting.requested_email_addresses")}`,
-    "",
-    "TIMELINE",
-    `Start Timing: ${field(s, "start_timing", "timeline.start_timing")}`,
-    `Launch Deadline: ${field(s, "launch_deadline", "timeline.launch_deadline")}`,
-    "",
-    "ADDITIONAL NOTES",
-    field(s, "final_notes", "final_notes") || field(s, "additional_notes") || "",
-  ];
-  return lines.filter(l => !l.endsWith(": ")).join("\n");
+    `Invoice Line: ${line}`,
+    `Selected Package: ${values.selected_package}`,
+    `Monthly Price: ${values.package_price_monthly ? `R${values.package_price_monthly}` : ""}`,
+    `Mailbox Limit: ${values.mailbox_limit}`,
+    `Domain Note: ${values.domain_choice || values.existing_domain || values.desired_domain}`,
+  ].filter((lineItem) => !lineItem.endsWith(": ")).join("\n");
 };
 
-const buildInvoiceCopy = (s: DbIntakeSubmission): string => {
-  const lines = [
-    "INVOICE COPY — ZOHO INVOICE CREATION",
-    "=".repeat(40),
-    `Customer/Business Name: ${field(s, "business_name")}`,
-    `Contact Person: ${field(s, "full_name")}`,
-    `Email: ${field(s, "email")}`,
-    `Phone: ${field(s, "phone")}`,
-    `Package: ${field(s, "selected_package", "selected_plan", "package_type")}`,
-    `Setup Fee: ${field(s, "setup_fee")}`,
-    `Monthly Fee: ${field(s, "monthly_fee")}`,
-    `Domain Request: ${field(s, "existing_domain", "domain_name") || field(s, "preferred_domains") || field(s, "domain_status")}`,
-    `Mailbox Count: ${field(s, "mailbox_count")}`,
-    `Requested Email Addresses: ${field(s, "requested_email_addresses")}`,
-  ];
-  return lines.filter(l => !l.endsWith(": ")).join("\n");
+const updateRawPayloadWithReview = (submission: DbIntakeSubmission, values: ReviewValues) => {
+  const payload = asRecord(submission.raw_payload) ? { ...submission.raw_payload } : {};
+  const body = asRecord(payload.body) ? { ...(payload.body as Record<string, unknown>) } : { ...payload };
+  body.review_overrides = values;
+  if (!payload.body && Object.keys(payload).length > 0) return { body };
+  return { ...payload, body };
 };
 
-const buildZohoCustomerCopy = (s: DbIntakeSubmission): string => {
-  const lines = [
-    "ZOHO CUSTOMER RECORD",
-    "=".repeat(40),
-    `Company Name: ${field(s, "business_name")}`,
-    `Display Name: ${field(s, "business_name") || field(s, "full_name")}`,
-    `First Name: ${field(s, "full_name").split(" ")[0] || ""}`,
-    `Last Name: ${field(s, "full_name").split(" ").slice(1).join(" ") || ""}`,
-    `Email: ${field(s, "email")}`,
-    `Phone: ${field(s, "phone")}`,
-    `Currency: ZAR`,
-    `Customer Type: Business`,
-    `Notes: ${[field(s, "industry"), field(s, "operating_area")].filter(Boolean).join(" | ")}`,
-  ];
-  return lines.filter(l => !l.endsWith(": ")).join("\n");
-};
-
-const downloadZohoCSV = (s: DbIntakeSubmission) => {
-  const fullName = field(s, "full_name");
-  const parts = fullName.split(" ");
-  const firstName = parts[0] || "";
-  const lastName = parts.slice(1).join(" ") || "";
-  const businessName = field(s, "business_name");
-  const email = field(s, "email");
-  const phone = field(s, "phone");
-  const industry = field(s, "industry");
-  const area = field(s, "operating_area");
-
-  const headers = [
-    "Customer Name", "First Name", "Last Name", "Company Name",
-    "Email", "Phone", "Mobile", "Currency Code",
-    "Customer Type", "Notes",
-  ];
+const downloadZohoCSV = (values: ReviewValues) => {
+  const headers = ["Customer Name", "Company Name", "Email", "Phone / Mobile", "Website / Domain", "Currency Code", "Notes"];
   const row = [
-    businessName || fullName, firstName, lastName, businessName,
-    email, phone, phone, "ZAR",
-    "Business", [industry, area].filter(Boolean).join(" | "),
+    values.full_name,
+    values.business_name,
+    values.email || values.admin_contact_email,
+    values.whatsapp_number,
+    values.existing_domain || values.desired_domain,
+    "ZAR",
+    values.notes,
   ];
-  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  const csv = [headers.map(escape).join(","), row.map(escape).join(",")].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
+  const escape = (value: string) => `"${(value || "").replace(/"/g, '""')}"`;
+  const blob = new Blob([[headers.map(escape).join(","), row.map(escape).join(",")].join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `zoho-customer-${(businessName || fullName || "client").replace(/\s+/g, "-").toLowerCase()}.csv`;
-  a.click();
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `zoho-customer-${(values.business_name || values.full_name || "client").replace(/\s+/g, "-").toLowerCase()}.csv`;
+  link.click();
   URL.revokeObjectURL(url);
 };
-
-// ─── Field Mapping Check ──────────────────────────────────────────────────────
-
-const REQUIRED_FIELDS: { label: string; col: keyof DbIntakeSubmission; payloadPaths: string[] }[] = [
-  { label: "Name", col: "full_name", payloadPaths: ["name", "full_name"] },
-  { label: "Email", col: "email", payloadPaths: ["email"] },
-  { label: "Phone", col: "phone", payloadPaths: ["phone"] },
-  { label: "Business Name", col: "business_name", payloadPaths: ["business_name"] },
-  { label: "Selected Package", col: "selected_package", payloadPaths: ["selected_plan", "package_type"] },
-  { label: "Setup Fee", col: "setup_fee", payloadPaths: ["setup_fee"] },
-  { label: "Monthly Fee", col: "monthly_fee", payloadPaths: ["monthly_fee"] },
-  { label: "Preferred Contact", col: "preferred_contact", payloadPaths: ["preferred_contact"] },
-  { label: "Business Registration", col: "business_registration", payloadPaths: ["business_registration"] },
-  { label: "Domain Status", col: "domain_status", payloadPaths: ["domain.domain_status"] },
-  { label: "Existing Domain", col: "existing_domain", payloadPaths: ["domain.existing_domain", "domain_name"] },
-  { label: "Domain Provider", col: "domain_provider", payloadPaths: ["domain.domain_provider"] },
-  { label: "Domain Access", col: "domain_access", payloadPaths: ["domain.domain_access"] },
-  { label: "Preferred Domains", col: "preferred_domains", payloadPaths: ["domain.preferred_domains"] },
-  { label: "Industry", col: "industry", payloadPaths: ["business_overview.industry"] },
-  { label: "Operating Area", col: "operating_area", payloadPaths: ["business_overview.operating_area"] },
-  { label: "Business Overview", col: "business_overview", payloadPaths: ["business_overview.business_description", "business_description"] },
-  { label: "Ideal Customers", col: "ideal_customers", payloadPaths: ["business_overview.ideal_customers"] },
-  { label: "Customer Problem Solved", col: "customer_problem_solved", payloadPaths: ["business_overview.customer_problem_solved"] },
-  { label: "Trust Factors", col: "trust_factors", payloadPaths: ["business_overview.trust_factors"] },
-  { label: "Website Goals", col: "website_goals", payloadPaths: ["website_goals.goals", "website_goal"] },
-  { label: "Main Visitor Action", col: "main_visitor_action", payloadPaths: ["website_goals.main_visitor_action"] },
-  { label: "Pages Needed", col: "pages_needed", payloadPaths: ["pages_needed.pages", "selected_pages"] },
-  { label: "Main Services/Products", col: "main_services_products", payloadPaths: ["website_goals.main_services_products"] },
-  { label: "Content Status", col: "content_status", payloadPaths: ["content_assets.content_status"] },
-  { label: "Logo Status", col: "logo_status", payloadPaths: ["content_assets.logo_status"] },
-  { label: "Brand Colours", col: "brand_colours_status", payloadPaths: ["content_assets.brand_colours_status"] },
-  { label: "Photos/Images", col: "photos_status", payloadPaths: ["content_assets.photos_status"] },
-  { label: "Upload Note", col: "upload_note", payloadPaths: ["content_assets.upload_note"] },
-  { label: "Design Style", col: "design_style", payloadPaths: ["design_preferences.design_style"] },
-  { label: "Examples Liked", col: "website_examples_liked", payloadPaths: ["design_preferences.website_examples_liked"] },
-  { label: "Websites Disliked", col: "websites_disliked", payloadPaths: ["design_preferences.websites_disliked"] },
-  { label: "Competitors", col: "competitors", payloadPaths: ["design_preferences.competitors"] },
-  { label: "Features Needed", col: "features_needed", payloadPaths: ["design_preferences.features_needed"] },
-  { label: "Mailbox Count", col: "mailbox_count", payloadPaths: ["email_hosting.mailbox_count"] },
-  { label: "Email Addresses", col: "requested_email_addresses", payloadPaths: ["email_hosting.requested_email_addresses"] },
-  { label: "Start Timing", col: "start_timing", payloadPaths: ["timeline.start_timing"] },
-  { label: "Launch Deadline", col: "launch_deadline", payloadPaths: ["timeline.launch_deadline"] },
-  { label: "Final Notes", col: "final_notes", payloadPaths: ["final_notes", "additional_notes"] },
-];
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 
 interface Props {
   enquiry: DbIntakeSubmission;
@@ -276,9 +340,37 @@ interface Props {
 
 export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
   const [enq, setEnq] = useState(enqProp);
+  const [values, setValues] = useState<ReviewValues>(() => buildInitialReviewValues(enqProp));
+  const [savingReview, setSavingReview] = useState(false);
   const [converting, setConverting] = useState(false);
-  const [showFieldCheck, setShowFieldCheck] = useState(false);
   const queryClient = useQueryClient();
+
+  const { data: clients = [] } = useQuery({
+    queryKey: ["clients", "duplicate_check"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clients").select("*");
+      if (error) throw error;
+      return (data ?? []) as DbClient[];
+    },
+  });
+
+  const { data: submissions = [] } = useQuery({
+    queryKey: ["intake_submissions", "duplicate_check"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("intake_submissions").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DbIntakeSubmission[];
+    },
+  });
+
+  const selectedPackage = selectedPackageFor(values, enq);
+  const resolvedServiceType = serviceTypeFor(values, enq);
+  const isBusinessEmail = isBusinessEmailPackage(selectedPackage) || resolvedServiceType === "business_email";
+  const isMigration = resolvedServiceType === EMAIL_MIGRATION_PACKAGE.selectedPackage || resolvedServiceType === "email_migration";
+  const isEmailService = isBusinessEmail || isMigration;
+  const duplicate = useMemo(() => duplicateStatus(values, enq, clients, submissions), [clients, enq, submissions, values]);
+  const zohoCustomerCopy = buildZohoCustomerCopy(values);
+  const zohoInvoiceCopy = buildZohoInvoiceCopy(values, resolvedServiceType);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["intake_submissions"] });
@@ -287,11 +379,46 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
     queryClient.invalidateQueries({ queryKey: ["client_services"] });
   };
 
+  const updateValue = (name: string, value: string) => setValues((previous) => ({ ...previous, [name]: value }));
+
+  const handleSaveReview = async () => {
+    setSavingReview(true);
+    try {
+      const updatePayload: Record<string, unknown> = {
+        raw_payload: updateRawPayloadWithReview(enq, values),
+      };
+      Object.entries(values).forEach(([key, value]) => {
+        if (KNOWN_REVIEW_COLUMNS.has(key as keyof DbIntakeSubmission)) updatePayload[key] = value || null;
+      });
+      if (values.whatsapp_number) updatePayload.phone = values.whatsapp_number;
+
+      const { data, error } = await supabase
+        .from("intake_submissions")
+        .update(updatePayload)
+        .eq("id", enq.id)
+        .select("*")
+        .single();
+      if (error) throw error;
+
+      setEnq(data as DbIntakeSubmission);
+      invalidate();
+      toast({ title: "Review details saved" });
+    } catch (error) {
+      toast({ title: "Failed to save review details", description: (error as Error).message, variant: "destructive" });
+    } finally {
+      setSavingReview(false);
+    }
+  };
+
   const handleStatusChange = async (newStatus: string) => {
-    await supabase.from("intake_submissions").update({ status: newStatus }).eq("id", enq.id);
+    const { error } = await supabase.from("intake_submissions").update({ status: newStatus }).eq("id", enq.id);
+    if (error) {
+      toast({ title: "Status update failed", description: error.message, variant: "destructive" });
+      return;
+    }
     invalidate();
     setEnq({ ...enq, status: newStatus });
-    toast({ title: `Status → ${newStatus}` });
+    toast({ title: `Status changed to ${newStatus}` });
   };
 
   const handleActivate = async () => {
@@ -299,28 +426,29 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
       toast({ title: "Already activated", variant: "destructive" });
       return;
     }
+
     setConverting(true);
     try {
-      const { serviceType, config, usedFallback } = resolveServiceType(enq.service_type);
-      const businessName = field(enq, "business_name") || field(enq, "full_name") || "New Client";
+      const serviceCode = resolvedServiceType;
+      const { serviceType, config, usedFallback } = resolveServiceType(serviceCode);
+      const businessName = values.business_name || values.full_name || "New Client";
       const activationStartedAt = new Date().toISOString();
 
-      const { data: client, error: ce } = await supabase
+      const { data: client, error: clientError } = await supabase
         .from("clients")
         .insert({
           business_name: businessName,
-          email: field(enq, "email"),
-          phone: field(enq, "phone"),
-          industry: field(enq, "industry", "business_overview.industry"),
-          website_url: field(enq, "existing_domain", "domain_name"),
-          notes: field(enq, "business_overview", "business_overview.business_description"),
+          email: values.email || values.admin_contact_email || null,
+          phone: values.whatsapp_number || null,
+          website_url: values.existing_domain || values.desired_domain || null,
+          notes: values.notes || null,
           status: "active",
         })
         .select()
         .single();
-      if (ce) throw ce;
+      if (clientError) throw clientError;
 
-      const { error: serviceErr } = await supabase
+      const { error: serviceError } = await supabase
         .from("client_services")
         .insert({
           client_id: client.id,
@@ -329,13 +457,14 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
           source: "enquiry_activation",
           status: "active",
           started_at: activationStartedAt,
+          billing_cycle: isBusinessEmail ? "monthly" : "once_off",
+          notes: isEmailService ? zohoInvoiceCopy : values.notes || null,
         });
-      if (serviceErr) throw serviceErr;
+      if (serviceError) throw serviceError;
 
       let projectId: string | null = null;
-
       if (config.requiresProject && config.projectType) {
-        const { data: project, error: pe } = await supabase
+        const { data: project, error: projectError } = await supabase
           .from("projects")
           .insert({
             client_id: client.id,
@@ -343,54 +472,43 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
             project_type: config.projectType,
             priority: "medium",
             stage: "enquiry_received",
-            description: field(enq, "website_goals", "website_goals.goals", "website_goal"),
+            description: values.notes || field(enq, "website_goals", "website_goals.goals", "website_goal"),
           })
           .select("id")
           .single();
-        if (pe) throw pe;
+        if (projectError) throw projectError;
         projectId = project.id;
       }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("intake_submissions")
-        .update({ status: "activated", client_id: client.id, project_id: projectId })
+        .update({
+          status: "activated",
+          client_id: client.id,
+          project_id: projectId,
+          raw_payload: updateRawPayloadWithReview(enq, values),
+        })
         .eq("id", enq.id);
+      if (updateError) throw updateError;
 
       invalidate();
       setEnq({ ...enq, status: "activated", client_id: client.id, project_id: projectId });
       toast({
         title: usedFallback ? "Client activated as General Enquiry" : "Client activated successfully",
-        description: config.requiresProject
-          ? `${config.label} project created.`
-          : `${config.label} service created. No project created.`,
+        description: config.requiresProject ? `${config.label} project created.` : `${config.label} service created. No project created.`,
       });
-    } catch (err: unknown) {
-      toast({ title: (err as Error).message || "Failed to activate", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Failed to activate", description: (error as Error).message, variant: "destructive" });
     } finally {
       setConverting(false);
     }
   };
 
-  const brief = buildWebsiteBrief(enq);
-  const invoiceCopy = buildInvoiceCopy(enq);
-  const zohoCopy = buildZohoCustomerCopy(enq);
-
-  // Field mapping check
-  const fieldCheckResults = REQUIRED_FIELDS.map((f) => {
-    const colVal = enq[f.col];
-    const hasDirectValue = (typeof colVal === "string" && colVal.trim()) ||
-                           typeof colVal === "boolean" ||
-                           typeof colVal === "number";
-    const payloadVal = field(enq, f.col, ...f.payloadPaths);
-    const missing = !hasDirectValue && !payloadVal;
-    return { ...f, colVal: hasDirectValue ? String(colVal) : null, payloadVal, missing };
-  });
-  const missingCount = fieldCheckResults.filter(r => r.missing).length;
-  const mismatchCount = fieldCheckResults.filter(r => r.colVal && r.payloadVal && r.colVal !== r.payloadVal).length;
+  const serviceFields = isMigration ? MIGRATION_FIELDS : BUSINESS_EMAIL_FIELDS;
+  const activationLabel = isEmailService ? "Activate - Create Client + Service" : "Activate - Create Client + Project";
 
   return (
-    <div className="space-y-4 max-w-3xl">
-      {/* Header */}
+    <div className="space-y-4 max-w-4xl">
       <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 text-muted-foreground">
         <ArrowLeft className="h-4 w-4" /> Back to Enquiries
       </Button>
@@ -398,184 +516,119 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-heading font-extrabold text-foreground">
-            {field(enq, "full_name") || field(enq, "business_name") || "Unknown Enquiry"}
+            {values.full_name || values.business_name || "Unknown Enquiry"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {field(enq, "email")} · {field(enq, "phone")} · Submitted {new Date(enq.created_at).toLocaleDateString("en-ZA")}
+            {values.email || "No email"} / {values.whatsapp_number || "No phone"} / Submitted {new Date(enq.created_at).toLocaleDateString("en-ZA")}
           </p>
         </div>
         <StatusBadge status={enq.status} />
       </div>
 
-      {/* ── Status + Actions ── */}
       <SectionCard title="Actions">
-        <div className="flex flex-wrap gap-2 mb-3">
-          {["new", "contacted", "qualified", "activated", "icebox", "rejected"].map((s) => (
+        <div className="flex flex-wrap gap-2">
+          {["new", "contacted", "qualified", "activated", "icebox", "rejected"].map((status) => (
             <Button
-              key={s}
+              key={status}
               size="sm"
-              variant={enq.status === s ? "default" : "outline"}
+              variant={enq.status === status ? "default" : "outline"}
               className="capitalize rounded-xl text-xs"
-              onClick={() => handleStatusChange(s)}
+              onClick={() => handleStatusChange(status)}
             >
-              {s}
+              {status}
             </Button>
           ))}
         </div>
-        <Button
-          className="gap-2 rounded-xl"
-          onClick={handleActivate}
-          disabled={converting || !!enq.client_id}
-        >
-          {enq.client_id ? "Already Activated" : "Activate → Create Client + Project"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="gap-2 rounded-xl" onClick={handleSaveReview} disabled={savingReview}>
+            {savingReview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Review Updates
+          </Button>
+          <Button className="gap-2 rounded-xl" onClick={handleActivate} disabled={converting || !!enq.client_id}>
+            {converting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {enq.client_id ? "Already Activated" : activationLabel}
+          </Button>
+        </div>
       </SectionCard>
 
-      {/* ── All Intake Fields ── */}
-      <SectionCard title="Contact & Package">
-        <Row label="Name" value={field(enq, "full_name")} />
-        <Row label="Business Name" value={field(enq, "business_name")} />
-        <Row label="Email" value={field(enq, "email")} />
-        <Row label="Phone" value={field(enq, "phone")} />
-        <Row label="Preferred Contact" value={field(enq, "preferred_contact", "preferred_contact")} />
-        <Row label="Business Reg No." value={field(enq, "business_registration", "business_registration")} />
-        <Row label="Selected Package" value={field(enq, "selected_package", "selected_plan", "package_type")} />
-        <Row label="Setup Fee" value={field(enq, "setup_fee", "setup_fee")} />
-        <Row label="Monthly Fee" value={field(enq, "monthly_fee", "monthly_fee")} />
+      <SectionCard title="Duplicate Check">
+        <Row label="Duplicate check status" value={formatStatus(duplicate)} />
       </SectionCard>
 
-      <SectionCard title="Domain">
-        <Row label="Domain Status" value={field(enq, "domain_status", "domain.domain_status")} />
-        <Row label="Existing Domain" value={field(enq, "existing_domain", "domain.existing_domain") || field(enq, "domain_name")} />
-        <Row label="Domain Provider" value={field(enq, "domain_provider", "domain.domain_provider")} />
-        <Row label="Domain Access" value={field(enq, "domain_access", "domain.domain_access")} />
-        <Row label="Preferred Domains" value={field(enq, "preferred_domains", "domain.preferred_domains")} />
+      <SectionCard title="Editable Review Before Activation">
+        <div className="grid sm:grid-cols-2 gap-3">
+          {COMMON_EDIT_FIELDS.map(([name, label]) => (
+            <EditField key={name} name={name} label={label} value={values[name]} onChange={updateValue} />
+          ))}
+          <PackageSelect value={values.selected_package} onChange={updateValue} />
+          {serviceFields.map(([name, label]) => (
+            name === "selected_package" ? null : (
+              <EditField
+                key={name}
+                name={name}
+                label={label}
+                value={values[name]}
+                onChange={updateValue}
+                multiline={["required_email_addresses", "current_email_addresses", "current_issue", "domain_check_message", "notes"].includes(name)}
+              />
+            )
+          ))}
+        </div>
       </SectionCard>
 
-      <SectionCard title="Business Overview">
-        <Row label="Industry" value={field(enq, "industry", "business_overview.industry")} />
-        <Row label="Operating Area" value={field(enq, "operating_area", "business_overview.operating_area")} />
-        <Row label="Business Overview" value={field(enq, "business_overview", "business_overview.business_description", "business_description")} />
-        <Row label="Ideal Customers" value={field(enq, "ideal_customers", "business_overview.ideal_customers")} />
-        <Row label="Customer Problem Solved" value={field(enq, "customer_problem_solved", "business_overview.customer_problem_solved")} />
-        <Row label="Trust Factors" value={field(enq, "trust_factors", "business_overview.trust_factors")} />
+      <SectionCard title={isMigration ? "Email Migration Details" : "Business Email Details"}>
+        {serviceFields.map(([name, label]) => (
+          name === "main_admin_mailbox" && !values[name] ? null : <Row key={name} label={label} value={values[name]} />
+        ))}
+        {field(enq, "turnstile_token") && <Row label="Turnstile Token" value="Present" />}
       </SectionCard>
 
-      <SectionCard title="Website Goals">
-        <Row label="Website Goals" value={field(enq, "website_goals", "website_goals.goals", "website_goal")} />
-        <Row label="Main Visitor Action" value={field(enq, "main_visitor_action", "website_goals.main_visitor_action")} />
-        <Row label="Pages Needed" value={field(enq, "pages_needed", "pages_needed.pages", "selected_pages")} />
-        <Row label="Main Services/Products" value={field(enq, "main_services_products", "website_goals.main_services_products")} />
-      </SectionCard>
-
-      <SectionCard title="Content & Assets">
-        <Row label="Content Status" value={field(enq, "content_status", "content_assets.content_status")} />
-        <Row label="Logo Status" value={field(enq, "logo_status", "content_assets.logo_status")} />
-        <Row label="Brand Colours" value={field(enq, "brand_colours_status", "content_assets.brand_colours_status")} />
-        <Row label="Photos/Images" value={field(enq, "photos_status", "content_assets.photos_status")} />
-        <Row label="Upload Note" value={field(enq, "upload_note", "content_assets.upload_note")} />
-      </SectionCard>
-
-      <SectionCard title="Design Preferences">
-        <Row label="Design Style" value={field(enq, "design_style", "design_preferences.design_style")} />
-        <Row label="Websites Liked" value={field(enq, "website_examples_liked", "design_preferences.website_examples_liked")} />
-        <Row label="Websites Disliked" value={field(enq, "websites_disliked", "design_preferences.websites_disliked")} />
-        <Row label="Competitors" value={field(enq, "competitors", "design_preferences.competitors")} />
-        <Row label="Features Needed" value={field(enq, "features_needed", "design_preferences.features_needed")} />
-      </SectionCard>
-
-      <SectionCard title="Email Hosting">
-        <Row label="Mailbox Count" value={field(enq, "mailbox_count", "email_hosting.mailbox_count")} />
-        <Row label="Email Addresses" value={field(enq, "requested_email_addresses", "email_hosting.requested_email_addresses")} />
-      </SectionCard>
-
-      <SectionCard title="Timeline & Notes">
-        <Row label="Start Timing" value={field(enq, "start_timing", "timeline.start_timing")} />
-        <Row label="Launch Deadline" value={field(enq, "launch_deadline", "timeline.launch_deadline")} />
-        <Row label="Final Notes" value={field(enq, "final_notes", "final_notes") || field(enq, "additional_notes")} />
-      </SectionCard>
-
-      {/* ── Task 2: Admin Copy Sections ── */}
-      <SectionCard
-        title="📋 Website Brief Copy"
-        action={<CopyButton text={brief} label="Copy Brief" />}
-      >
-        <pre className="text-xs font-mono whitespace-pre-wrap bg-muted/40 rounded-xl p-3 max-h-64 overflow-y-auto">{brief}</pre>
-      </SectionCard>
-
-      <SectionCard
-        title="🧾 Invoice Copy (Zoho)"
-        action={<CopyButton text={invoiceCopy} label="Copy Invoice" />}
-      >
-        <pre className="text-xs font-mono whitespace-pre-wrap bg-muted/40 rounded-xl p-3">{invoiceCopy}</pre>
-      </SectionCard>
-
-      <SectionCard
-        title="👤 Zoho Customer Copy"
-        action={<CopyButton text={zohoCopy} label="Copy Customer" />}
-      >
-        <pre className="text-xs font-mono whitespace-pre-wrap bg-muted/40 rounded-xl p-3">{zohoCopy}</pre>
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-1.5 text-xs rounded-xl mt-2"
-          onClick={() => downloadZohoCSV(enq)}
-        >
-          <Download className="h-3 w-3" /> Download Zoho Customer CSV
-        </Button>
-      </SectionCard>
-
-      {/* ── Task 3: Field Mapping Check ── */}
-      <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
-        <button
-          className="flex items-center justify-between w-full px-4 py-3 border-b border-border bg-muted/30 text-left"
-          onClick={() => setShowFieldCheck(!showFieldCheck)}
-        >
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            🔍 Field Mapping Check (Admin Debug)
-            {missingCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-amber-600">
-                <AlertTriangle className="h-3 w-3" />{missingCount} missing
-              </span>
-            )}
-            {mismatchCount > 0 && (
-              <span className="text-red-600 ml-2">⚠ {mismatchCount} mismatch</span>
-            )}
-          </p>
-          <span className="text-xs text-muted-foreground">{showFieldCheck ? "Hide" : "Show"}</span>
-        </button>
-        {showFieldCheck && (
-          <div className="p-4 space-y-1 max-h-96 overflow-y-auto">
-            <p className="text-xs text-muted-foreground mb-3">
-              Green = DB column has value. Blue = found in raw_payload. Red = missing from both.
+      {isEmailService ? (
+        <>
+          <SectionCard title="Website Work">
+            <p className="text-sm text-muted-foreground">
+              {isMigration ? "Not applicable for Email Migration service." : "Not applicable for Business Email service."}
             </p>
-            {fieldCheckResults.map((r) => (
-              <div
-                key={r.label}
-                className={`flex items-start gap-2 text-xs px-2 py-1 rounded-lg ${
-                  r.missing
-                    ? "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300"
-                    : r.colVal
-                    ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300"
-                    : "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300"
-                }`}
-              >
-                <span className="w-44 shrink-0 font-medium">{r.label}</span>
-                <span className="flex-1 truncate">
-                  {r.missing ? "⚠ MISSING" : r.colVal ? `✓ DB: ${r.colVal.substring(0, 60)}` : `↗ Payload: ${r.payloadVal.substring(0, 60)}`}
-                </span>
-              </div>
-            ))}
-            <details className="mt-3">
-              <summary className="text-xs text-muted-foreground cursor-pointer">Raw Payload JSON</summary>
-              <pre className="text-xs font-mono mt-2 bg-muted/40 rounded-xl p-3 max-h-64 overflow-y-auto whitespace-pre-wrap">
-                {JSON.stringify(enq.raw_payload, null, 2) || "null"}
-              </pre>
-            </details>
-          </div>
-        )}
-      </div>
+          </SectionCard>
+          <SectionCard title="SEO">
+            <p className="text-sm text-muted-foreground">
+              {isMigration ? "Not applicable for Email Migration service." : "Not applicable for Business Email service."}
+            </p>
+          </SectionCard>
+        </>
+      ) : (
+        <SectionCard title="Website Brief">
+          <Row label="Website Goals" value={field(enq, "website_goals", "website_goals.goals", "website_goal")} />
+          <Row label="Pages Needed" value={field(enq, "pages_needed", "pages_needed.pages", "selected_pages")} />
+          <Row label="Main Services/Products" value={field(enq, "main_services_products", "website_goals.main_services_products")} />
+          <Row label="Design Style" value={field(enq, "design_style", "design_preferences.design_style")} />
+          <Row label="Features Needed" value={field(enq, "features_needed", "design_preferences.features_needed")} />
+        </SectionCard>
+      )}
 
+      {isEmailService && (
+        <>
+          <SectionCard title="Zoho Customer Preparation" action={<CopyButton text={zohoCustomerCopy} label="Copy Customer" />}>
+            <pre className="text-xs font-mono whitespace-pre-wrap bg-muted/40 rounded-xl p-3">{zohoCustomerCopy}</pre>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs rounded-xl" onClick={() => downloadZohoCSV(values)}>
+              <Download className="h-3 w-3" /> Download Customer CSV
+            </Button>
+          </SectionCard>
+
+          <SectionCard title="Zoho Invoice Preview" action={<CopyButton text={zohoInvoiceCopy} label="Copy Invoice" />}>
+            <pre className="text-xs font-mono whitespace-pre-wrap bg-muted/40 rounded-xl p-3">{zohoInvoiceCopy}</pre>
+          </SectionCard>
+        </>
+      )}
+
+      <SectionCard title="Raw / Legacy Data">
+        <details>
+          <summary className="text-xs text-muted-foreground cursor-pointer">Show raw payload, including legacy mailbox fields</summary>
+          <pre className="text-xs font-mono mt-2 bg-muted/40 rounded-xl p-3 max-h-80 overflow-y-auto whitespace-pre-wrap">
+            {JSON.stringify(enq.raw_payload, null, 2) || "null"}
+          </pre>
+        </details>
+      </SectionCard>
     </div>
   );
 }

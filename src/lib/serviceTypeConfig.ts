@@ -3,7 +3,35 @@ export type ServiceTypeConfig = {
   requiresProject: boolean;
   projectType?: string;
   projectNamePrefix?: string;
+  mailboxLimit?: number;
+  monthlyPrice?: number;
 };
+
+export const BUSINESS_EMAIL_PACKAGES = {
+  business_email_10: {
+    label: "Business Email 10",
+    mailboxLimit: 10,
+    monthlyPrice: 150,
+  },
+  business_email_30: {
+    label: "Business Email 30",
+    mailboxLimit: 30,
+    monthlyPrice: 450,
+  },
+  business_email_50: {
+    label: "Business Email 50",
+    mailboxLimit: 50,
+    monthlyPrice: 850,
+  },
+} as const;
+
+export type BusinessEmailPackageCode = keyof typeof BUSINESS_EMAIL_PACKAGES;
+
+export const EMAIL_MIGRATION_PACKAGE = {
+  selectedPackage: "email_migration_setup",
+  serviceType: "email_migration",
+  label: "Email Migration & Setup",
+} as const;
 
 export const SERVICE_TYPE_CONFIG = {
   website_build: {
@@ -64,7 +92,29 @@ export const SERVICE_TYPE_CONFIG = {
     label: "Business Email",
     requiresProject: false,
   },
+  business_email_10: {
+    label: BUSINESS_EMAIL_PACKAGES.business_email_10.label,
+    requiresProject: false,
+    mailboxLimit: BUSINESS_EMAIL_PACKAGES.business_email_10.mailboxLimit,
+    monthlyPrice: BUSINESS_EMAIL_PACKAGES.business_email_10.monthlyPrice,
+  },
+  business_email_30: {
+    label: BUSINESS_EMAIL_PACKAGES.business_email_30.label,
+    requiresProject: false,
+    mailboxLimit: BUSINESS_EMAIL_PACKAGES.business_email_30.mailboxLimit,
+    monthlyPrice: BUSINESS_EMAIL_PACKAGES.business_email_30.monthlyPrice,
+  },
+  business_email_50: {
+    label: BUSINESS_EMAIL_PACKAGES.business_email_50.label,
+    requiresProject: false,
+    mailboxLimit: BUSINESS_EMAIL_PACKAGES.business_email_50.mailboxLimit,
+    monthlyPrice: BUSINESS_EMAIL_PACKAGES.business_email_50.monthlyPrice,
+  },
   email_migration: {
+    label: "Email Migration & Setup",
+    requiresProject: false,
+  },
+  email_migration_setup: {
     label: "Email Migration & Setup",
     requiresProject: false,
   },
@@ -115,6 +165,15 @@ export const SERVICE_TYPE_CONFIG = {
 } as const satisfies Record<string, ServiceTypeConfig>;
 
 export type KnownServiceType = keyof typeof SERVICE_TYPE_CONFIG;
+
+export const isBusinessEmailPackage = (value: string | null | undefined): value is BusinessEmailPackageCode =>
+  !!value && value in BUSINESS_EMAIL_PACKAGES;
+
+export const isEmailMigrationService = (serviceType: string | null | undefined, selectedPackage?: string | null) =>
+  serviceType === EMAIL_MIGRATION_PACKAGE.serviceType || selectedPackage === EMAIL_MIGRATION_PACKAGE.selectedPackage;
+
+export const packageLabel = (value: string | null | undefined) =>
+  isBusinessEmailPackage(value) ? BUSINESS_EMAIL_PACKAGES[value].label : value || "";
 
 export const resolveServiceType = (serviceType: string | null | undefined) => {
   const normalized = serviceType?.trim() as KnownServiceType | undefined;

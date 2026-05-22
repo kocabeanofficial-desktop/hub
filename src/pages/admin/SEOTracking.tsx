@@ -8,9 +8,9 @@ import type { DbClientService } from "@/types/database";
 const SEO_SERVICE_CODES = new Set(["seo", "basic_seo", "seo_management", "website_seo"]);
 const NON_SEO_ONLY_SERVICE_CODES = new Set([
   "business_email",
-  "business_email_5",
   "business_email_10",
   "business_email_30",
+  "business_email_50",
   "email_migration",
   "email_migration_setup",
   "email_only",
