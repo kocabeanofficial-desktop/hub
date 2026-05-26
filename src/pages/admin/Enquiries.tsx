@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Inbox, Search, Trash2, XCircle } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -128,14 +128,23 @@ const Enquiries = () => {
     return matchesSearch && matchesStatus;
   }), [enquiries, search, statusFilter]);
 
-  const selectedEnquiries = enquiries.filter((enquiry) => selectedIds.includes(enquiry.id));
-  const allFilteredSelected = filtered.length > 0 && filtered.every((enquiry) => selectedIds.includes(enquiry.id));
-  const someFilteredSelected = filtered.some((enquiry) => selectedIds.includes(enquiry.id));
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const filteredIds = useMemo(() => filtered.map((enquiry) => enquiry.id), [filtered]);
+  const selectedEnquiries = enquiries.filter((enquiry) => selectedIdSet.has(enquiry.id));
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIdSet.has(id));
+  const someFilteredSelected = filteredIds.some((id) => selectedIdSet.has(id));
+
+  useEffect(() => {
+    const liveIds = new Set(enquiries.map((enquiry) => enquiry.id));
+    setSelectedIds((previous) => previous.filter((id) => liveIds.has(id)));
+  }, [enquiries]);
 
   const toggleAll = () => {
     setSelectedIds((previous) => {
-      if (allFilteredSelected) return previous.filter((id) => !filtered.some((enquiry) => enquiry.id === id));
-      return Array.from(new Set([...previous, ...filtered.map((enquiry) => enquiry.id)]));
+      const filteredIdSet = new Set(filteredIds);
+      const hasAllFiltered = filteredIds.length > 0 && filteredIds.every((id) => previous.includes(id));
+      if (hasAllFiltered) return previous.filter((id) => !filteredIdSet.has(id));
+      return Array.from(new Set([...previous, ...filteredIds]));
     });
   };
 
@@ -286,8 +295,9 @@ const Enquiries = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  <th className="px-4 py-3 w-10">
+                  <th className="px-4 py-3 w-12 text-center">
                     <Checkbox
+                      className="mx-auto border-2 border-primary/70 bg-background shadow-sm"
                       checked={allFilteredSelected || (someFilteredSelected ? "indeterminate" : false)}
                       onCheckedChange={toggleAll}
                       aria-label="Select all enquiries"
@@ -315,8 +325,9 @@ const Enquiries = () => {
                     className="hover:bg-muted/20 transition-colors cursor-pointer"
                     onClick={() => setSelected(enq)}
                   >
-                    <td className="px-4 py-3.5" onClick={(event) => event.stopPropagation()}>
+                    <td className="px-4 py-3.5 text-center" onClick={(event) => event.stopPropagation()}>
                       <Checkbox
+                        className="mx-auto border-2 border-primary/70 bg-background shadow-sm"
                         checked={selectedIds.includes(enq.id)}
                         onCheckedChange={() => toggleOne(enq.id)}
                         aria-label={`Select enquiry ${getContactFullName(enq) || enq.id}`}
