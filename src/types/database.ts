@@ -158,6 +158,8 @@ export interface DbIntakeSubmission {
   client_id: string | null;
   project_id: string | null;
   status: string;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   created_at: string;
   updated_at: string | null;
 }

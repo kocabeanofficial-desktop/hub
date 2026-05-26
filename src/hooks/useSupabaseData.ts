@@ -31,7 +31,18 @@ export const useReports = () =>
   useQuery({ queryKey: ["reports"], queryFn: () => fetchTable<DbReport>("reports") });
 
 export const useIntakeSubmissions = () =>
-  useQuery({ queryKey: ["intake_submissions"], queryFn: () => fetchTable<DbIntakeSubmission>("intake_submissions") });
+  useQuery({
+    queryKey: ["intake_submissions"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("intake_submissions")
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as DbIntakeSubmission[];
+    },
+  });
 
 export const useAutomationEvents = () =>
   useQuery({ queryKey: ["automation_events"], queryFn: () => fetchTable<DbAutomationEvent>("automation_events") });

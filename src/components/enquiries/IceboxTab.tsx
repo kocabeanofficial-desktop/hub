@@ -103,6 +103,7 @@ export function useIceboxCount() {
       const { count, error } = await supabase
         .from("intake_submissions")
         .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
         .eq("status", "icebox");
       if (error) throw error;
       return count ?? 0;
@@ -117,6 +118,7 @@ function useIceboxSubmissions() {
       const { data, error } = await supabase
         .from("intake_submissions")
         .select("*")
+        .is("deleted_at", null)
         .eq("status", "icebox")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -244,8 +246,8 @@ export function IceboxTab() {
       invalidate();
       toast({ title: "Submission rejected" });
       setSelected(null);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Please try again.", variant: "destructive" });
     } finally {
       setRejecting(false);
     }

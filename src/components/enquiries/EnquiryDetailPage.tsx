@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Copy, Download, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download, Loader2, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { DeleteEnquiriesDialog } from "@/components/enquiries/DeleteEnquiriesDialog";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { DbClient, DbIntakeSubmission } from "@/types/database";
 import {
@@ -388,13 +390,17 @@ const downloadZohoCSV = (values: ReviewValues) => {
 interface Props {
   enquiry: DbIntakeSubmission;
   onBack: () => void;
+  onDeleted?: () => void;
 }
 
-export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
+export function EnquiryDetailPage({ enquiry: enqProp, onBack, onDeleted }: Props) {
   const [enq, setEnq] = useState(enqProp);
   const [values, setValues] = useState<ReviewValues>(() => buildInitialReviewValues(enqProp));
   const [savingReview, setSavingReview] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: clients = [] } = useQuery({
@@ -409,7 +415,11 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
   const { data: submissions = [] } = useQuery({
     queryKey: ["intake_submissions", "duplicate_check"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("intake_submissions").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("intake_submissions")
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as DbIntakeSubmission[];
     },
@@ -556,6 +566,47 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
     }
   };
 
+  const handleSoftDelete = async ({
+    deleteLinkedClient,
+    deleteLinkedProject,
+  }: {
+    deleteLinkedClient: boolean;
+    deleteLinkedProject: boolean;
+  }) => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("intake_submissions")
+        .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id || null, status: "archived" })
+        .eq("id", enq.id);
+      if (error) throw error;
+
+      if (deleteLinkedClient && enq.client_id) {
+        const { error: clientError } = await supabase.from("clients").update({ status: "archived" }).eq("id", enq.client_id);
+        if (clientError) throw clientError;
+      }
+
+      if (deleteLinkedProject && enq.project_id) {
+        const { error: projectError } = await supabase.from("projects").update({ stage: "archived" }).eq("id", enq.project_id);
+        if (projectError) throw projectError;
+      }
+
+      toast({ title: "Enquiry deleted" });
+      invalidate();
+      setDeleteDialogOpen(false);
+      onDeleted?.();
+      if (!onDeleted) onBack();
+    } catch (error) {
+      toast({
+        title: "Delete failed",
+        description: `${(error as Error).message}. If deleted_at/deleted_by are missing, add those columns to intake_submissions.`,
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const serviceFields = isMigration ? MIGRATION_FIELDS : BUSINESS_EMAIL_FIELDS;
   const activationLabel = isEmailService ? "Activate - Create Client + Service" : "Activate - Create Client + Project";
   const displayValueForKey = (key: string, value: string) =>
@@ -603,6 +654,10 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
           <Button className="gap-2 rounded-xl" onClick={handleActivate} disabled={converting || !!enq.client_id}>
             {converting && <Loader2 className="h-4 w-4 animate-spin" />}
             {enq.client_id ? "Already Activated" : activationLabel}
+          </Button>
+          <Button variant="destructive" className="gap-2 rounded-xl" onClick={() => setDeleteDialogOpen(true)} disabled={deleting}>
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Delete
           </Button>
         </div>
       </SectionCard>
@@ -699,6 +754,14 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack }: Props) {
           </pre>
         </details>
       </SectionCard>
+
+      <DeleteEnquiriesDialog
+        open={deleteDialogOpen}
+        enquiries={[enq]}
+        deleting={deleting}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleSoftDelete}
+      />
     </div>
   );
 }
