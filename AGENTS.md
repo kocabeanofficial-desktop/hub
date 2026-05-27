@@ -38,6 +38,17 @@ Treat these as sensitive:
 - Client data must stay scoped to the correct user/client.
 - Public forms may only insert safe intake data.
 
+## Required Context Files
+
+Before planning dashboard, security, intake, cleanup, or activation work, read these repository documents first:
+
+- README.md
+- 02_CURRENT_SYSTEM_AUDIT.md
+- 03_CLEANUP_PRIORITY_MAP.md
+- 04_PHASE_1_ACTIVATION_FIX.md
+
+If these files conflict with live code, inspect the live code and report the conflict before editing.
+
 ## Required Checks
 
 Before finishing any task, run:
