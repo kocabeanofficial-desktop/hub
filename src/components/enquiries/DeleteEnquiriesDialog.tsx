@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { getBusinessName, getContactEmail, getContactFullName, getContactPhone, getReviewField } from "@/lib/intakeReview";
 import type { DbIntakeSubmission } from "@/types/database";
 
 type DeleteOptions = {
@@ -26,6 +27,17 @@ interface Props {
   onConfirm: (options: DeleteOptions) => Promise<void> | void;
 }
 
+const previewLabel = (enquiry: DbIntakeSubmission) =>
+  getContactFullName(enquiry) || getBusinessName(enquiry) || getContactEmail(enquiry) || "Unnamed enquiry";
+
+const previewMeta = (enquiry: DbIntakeSubmission) =>
+  [
+    getBusinessName(enquiry),
+    getContactEmail(enquiry),
+    getContactPhone(enquiry),
+    getReviewField(enquiry, "selected_package") || enquiry.service_type || enquiry.business_type,
+  ].filter(Boolean).join(" / ");
+
 export function DeleteEnquiriesDialog({ open, enquiries, deleting = false, onOpenChange, onConfirm }: Props) {
   const [confirmation, setConfirmation] = useState("");
   const [deleteLinkedClient, setDeleteLinkedClient] = useState(false);
@@ -33,6 +45,8 @@ export function DeleteEnquiriesDialog({ open, enquiries, deleting = false, onOpe
 
   const linkedClientCount = useMemo(() => enquiries.filter((enquiry) => !!enquiry.client_id).length, [enquiries]);
   const linkedProjectCount = useMemo(() => enquiries.filter((enquiry) => !!enquiry.project_id).length, [enquiries]);
+  const previewEnquiries = useMemo(() => enquiries.slice(0, 5), [enquiries]);
+  const remainingPreviewCount = Math.max(enquiries.length - previewEnquiries.length, 0);
   const canDelete = confirmation === "DELETE" && enquiries.length > 0 && !deleting;
 
   const reset = () => {
@@ -56,9 +70,42 @@ export function DeleteEnquiriesDialog({ open, enquiries, deleting = false, onOpe
             Delete enquiry{enquiries.length === 1 ? "" : "ies"}
           </DialogTitle>
           <DialogDescription>
-            This soft deletes {enquiries.length} enquiry record{enquiries.length === 1 ? "" : "s"}. Rows are hidden from default admin views but not hard deleted.
+            This archives {enquiries.length} selected enquiry record{enquiries.length === 1 ? "" : "s"} and removes {enquiries.length === 1 ? "it" : "them"} from the active enquiries list. Records are not hard deleted.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+            <div className="min-w-0">
+              <p className="font-medium text-foreground">
+                {enquiries.length === 1 ? "This enquiry will be archived" : `${enquiries.length} enquiries will be archived`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Archive only the selected enquiry records you no longer want in the active list.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {previewEnquiries.length > 0 && (
+          <div className="rounded-xl border border-border bg-muted/30 divide-y divide-border overflow-hidden">
+            {previewEnquiries.map((enquiry) => {
+              const meta = previewMeta(enquiry);
+              return (
+                <div key={enquiry.id} className="px-3 py-2">
+                  <p className="text-sm font-medium text-foreground truncate">{previewLabel(enquiry)}</p>
+                  {meta && <p className="text-xs text-muted-foreground mt-0.5 truncate">{meta}</p>}
+                </div>
+              );
+            })}
+            {remainingPreviewCount > 0 && (
+              <p className="px-3 py-2 text-xs text-muted-foreground">
+                Plus {remainingPreviewCount} more selected enquir{remainingPreviewCount === 1 ? "y" : "ies"}.
+              </p>
+            )}
+          </div>
+        )}
 
         {(linkedClientCount > 0 || linkedProjectCount > 0) && (
           <div className="rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">

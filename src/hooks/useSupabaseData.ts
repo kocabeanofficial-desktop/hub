@@ -15,6 +15,68 @@ async function fetchTable<T>(table: string, orderBy = "created_at"): Promise<T[]
   return (data ?? []) as T[];
 }
 
+type SupabaseArchiveError = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+export type ActiveIntakeSubmissionsResult = {
+  submissions: DbIntakeSubmission[];
+  archiveSupported: boolean;
+};
+
+export const ARCHIVE_FIELDS_UNAVAILABLE_MESSAGE =
+  "Archive fields are not available yet. Enquiries are visible, but archive/delete is disabled until the database migration is applied.";
+
+export const isMissingArchiveColumnError = (error: unknown) => {
+  const value = (error || {}) as SupabaseArchiveError;
+  const combined = [value.code, value.message, value.details, value.hint]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    combined.includes("deleted_at") &&
+    (combined.includes("does not exist") ||
+      combined.includes("could not find") ||
+      combined.includes("schema cache") ||
+      combined.includes("42703"))
+  );
+};
+
+export async function fetchActiveIntakeSubmissions(): Promise<ActiveIntakeSubmissionsResult> {
+  const archiveAware = await supabase
+    .from("intake_submissions")
+    .select("*")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (!archiveAware.error) {
+    return {
+      submissions: (archiveAware.data ?? []) as DbIntakeSubmission[],
+      archiveSupported: true,
+    };
+  }
+
+  if (!isMissingArchiveColumnError(archiveAware.error)) throw archiveAware.error;
+
+  console.warn("Archive fields are not available; loading enquiries without archive filter.", archiveAware.error);
+
+  const fallback = await supabase
+    .from("intake_submissions")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (fallback.error) throw fallback.error;
+
+  return {
+    submissions: (fallback.data ?? []) as DbIntakeSubmission[],
+    archiveSupported: false,
+  };
+}
+
 export const useClients = () =>
   useQuery({ queryKey: ["clients"], queryFn: () => fetchTable<DbClient>("clients") });
 
@@ -34,13 +96,8 @@ export const useIntakeSubmissions = () =>
   useQuery({
     queryKey: ["intake_submissions"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("intake_submissions")
-        .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as DbIntakeSubmission[];
+      const { submissions } = await fetchActiveIntakeSubmissions();
+      return submissions;
     },
   });
 

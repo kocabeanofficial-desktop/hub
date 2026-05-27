@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { DeleteEnquiriesDialog } from "@/components/enquiries/DeleteEnquiriesDialog";
 import { toast } from "@/hooks/use-toast";
+import { ARCHIVE_FIELDS_UNAVAILABLE_MESSAGE, fetchActiveIntakeSubmissions } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { DbClient, DbIntakeSubmission } from "@/types/database";
@@ -20,6 +21,8 @@ import {
 import * as intakeReview from "@/lib/intakeReview";
 
 type ReviewValues = intakeReview.IntakeReviewValues;
+
+const DELETE_FAILED_MESSAGE = "Could not delete the enquiry. Please check that the enquiry archive fields exist and that your admin account has permission.";
 
 const KNOWN_REVIEW_COLUMNS = new Set<keyof DbIntakeSubmission>([
   "full_name",
@@ -389,11 +392,12 @@ const downloadZohoCSV = (values: ReviewValues) => {
 
 interface Props {
   enquiry: DbIntakeSubmission;
+  archiveSupported?: boolean;
   onBack: () => void;
   onDeleted?: () => void;
 }
 
-export function EnquiryDetailPage({ enquiry: enqProp, onBack, onDeleted }: Props) {
+export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, onBack, onDeleted }: Props) {
   const [enq, setEnq] = useState(enqProp);
   const [values, setValues] = useState<ReviewValues>(() => buildInitialReviewValues(enqProp));
   const [savingReview, setSavingReview] = useState(false);
@@ -415,13 +419,8 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack, onDeleted }: Props
   const { data: submissions = [] } = useQuery({
     queryKey: ["intake_submissions", "duplicate_check"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("intake_submissions")
-        .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as DbIntakeSubmission[];
+      const { submissions } = await fetchActiveIntakeSubmissions();
+      return submissions;
     },
   });
 
@@ -573,6 +572,14 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack, onDeleted }: Props
     deleteLinkedClient: boolean;
     deleteLinkedProject: boolean;
   }) => {
+    if (!archiveSupported) {
+      toast({
+        title: "Archive unavailable",
+        description: ARCHIVE_FIELDS_UNAVAILABLE_MESSAGE,
+        variant: "destructive",
+      });
+      return;
+    }
     setDeleting(true);
     try {
       const { error } = await supabase
@@ -597,9 +604,10 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack, onDeleted }: Props
       onDeleted?.();
       if (!onDeleted) onBack();
     } catch (error) {
+      console.error("Failed to archive enquiry", error);
       toast({
         title: "Delete failed",
-        description: `${(error as Error).message}. If deleted_at/deleted_by are missing, add those columns to intake_submissions.`,
+        description: DELETE_FAILED_MESSAGE,
         variant: "destructive",
       });
     } finally {
@@ -633,6 +641,11 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack, onDeleted }: Props
       </div>
 
       <SectionCard title="Actions">
+        {!archiveSupported && (
+          <div className="rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {ARCHIVE_FIELDS_UNAVAILABLE_MESSAGE}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           {["new", "contacted", "qualified", "activated", "icebox", "rejected"].map((status) => (
             <Button
@@ -655,7 +668,7 @@ export function EnquiryDetailPage({ enquiry: enqProp, onBack, onDeleted }: Props
             {converting && <Loader2 className="h-4 w-4 animate-spin" />}
             {enq.client_id ? "Already Activated" : activationLabel}
           </Button>
-          <Button variant="destructive" className="gap-2 rounded-xl" onClick={() => setDeleteDialogOpen(true)} disabled={deleting}>
+          <Button variant="destructive" className="gap-2 rounded-xl" onClick={() => setDeleteDialogOpen(true)} disabled={deleting || !archiveSupported}>
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             Delete
           </Button>
