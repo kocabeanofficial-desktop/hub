@@ -8,6 +8,7 @@ import {
   RefreshCw, RadioTower,
 } from "lucide-react";
 import kocaBeanLogo from "@/assets/koca-bean-logo.png";
+import { AdminTopbarTools } from "@/components/layout/AdminTopbarTools";
 
 const adminNav = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
@@ -121,6 +122,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
             <Menu className="h-5 w-5" />
           </button>
           <div className="flex-1" />
+          {user?.role === "admin" && <AdminTopbarTools />}
           <span className="text-xs text-muted-foreground hidden sm:block font-medium">
             {new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </span>
