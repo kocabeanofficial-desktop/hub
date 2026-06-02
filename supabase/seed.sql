@@ -388,3 +388,149 @@ SET
   updated_at = EXCLUDED.updated_at,
   deleted_at = null,
   deleted_by = null;
+
+INSERT INTO public.monitored_services (
+  id,
+  service_name,
+  service_type,
+  provider,
+  environment,
+  service_url,
+  login_url,
+  hostname,
+  status,
+  health,
+  monthly_cost,
+  currency,
+  billing_cycle,
+  next_due_date,
+  notes,
+  admin_notes,
+  last_checked_at,
+  created_at,
+  updated_at
+) VALUES (
+  '30000000-0000-4000-8000-000000000001',
+  'Koca Bean n8n Server',
+  'automation',
+  'HostAfrica',
+  'production',
+  'https://n8n.vm338ztbt-n8n.hcloud.app',
+  'https://n8n.vm338ztbt-n8n.hcloud.app',
+  'vm338ztbt-n8n.hcloud.app',
+  'active',
+  'running',
+  215.00,
+  'ZAR',
+  'monthly',
+  '2026-07-01',
+  'Cloud Server - South Africa A2026. Used for Koca Bean automation workflows.',
+  'Local dashboard seed only. No production checks or notifications are triggered by this record.',
+  now() - interval '2 hours',
+  now() - interval '7 days',
+  now()
+)
+ON CONFLICT (id) DO UPDATE
+SET
+  service_name = EXCLUDED.service_name,
+  service_type = EXCLUDED.service_type,
+  provider = EXCLUDED.provider,
+  environment = EXCLUDED.environment,
+  service_url = EXCLUDED.service_url,
+  login_url = EXCLUDED.login_url,
+  hostname = EXCLUDED.hostname,
+  status = EXCLUDED.status,
+  health = EXCLUDED.health,
+  monthly_cost = EXCLUDED.monthly_cost,
+  currency = EXCLUDED.currency,
+  billing_cycle = EXCLUDED.billing_cycle,
+  next_due_date = EXCLUDED.next_due_date,
+  notes = EXCLUDED.notes,
+  admin_notes = EXCLUDED.admin_notes,
+  last_checked_at = EXCLUDED.last_checked_at,
+  updated_at = now();
+
+INSERT INTO public.service_check_logs (
+  id,
+  service_id,
+  checked_at,
+  health,
+  status_code,
+  response_time_ms,
+  reminder_level,
+  message
+) VALUES
+  (
+    '30000000-0000-4000-8000-000000000011',
+    '30000000-0000-4000-8000-000000000001',
+    now() - interval '2 hours',
+    'running',
+    200,
+    318,
+    'ok',
+    'Local seed check: service returned a healthy response.'
+  ),
+  (
+    '30000000-0000-4000-8000-000000000012',
+    '30000000-0000-4000-8000-000000000001',
+    now() - interval '1 day',
+    'running',
+    200,
+    352,
+    'ok',
+    'Local seed check: login page reachable.'
+  ),
+  (
+    '30000000-0000-4000-8000-000000000013',
+    '30000000-0000-4000-8000-000000000001',
+    now() - interval '2 days',
+    'degraded',
+    200,
+    1260,
+    'ok',
+    'Local seed check: response was slower than usual.'
+  )
+ON CONFLICT (id) DO UPDATE
+SET
+  checked_at = EXCLUDED.checked_at,
+  health = EXCLUDED.health,
+  status_code = EXCLUDED.status_code,
+  response_time_ms = EXCLUDED.response_time_ms,
+  reminder_level = EXCLUDED.reminder_level,
+  message = EXCLUDED.message;
+
+INSERT INTO public.service_payment_reminders (
+  id,
+  service_id,
+  due_date,
+  reminder_level,
+  amount,
+  currency,
+  status,
+  notes,
+  created_at,
+  updated_at
+) VALUES (
+  '30000000-0000-4000-8000-000000000021',
+  '30000000-0000-4000-8000-000000000001',
+  '2026-07-01',
+  'ok',
+  215.00,
+  'ZAR',
+  'pending',
+  'Dashboard-only local payment reminder for the next HostAfrica monthly server payment.',
+  now() - interval '1 day',
+  now()
+)
+ON CONFLICT (id) DO UPDATE
+SET
+  due_date = EXCLUDED.due_date,
+  reminder_level = EXCLUDED.reminder_level,
+  amount = EXCLUDED.amount,
+  currency = EXCLUDED.currency,
+  status = CASE
+    WHEN public.service_payment_reminders.status = 'completed' THEN public.service_payment_reminders.status
+    ELSE EXCLUDED.status
+  END,
+  notes = EXCLUDED.notes,
+  updated_at = now();

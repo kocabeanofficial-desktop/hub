@@ -257,3 +257,54 @@ export interface DbClientHistoryNote {
   created_by: string | null;
   created_at: string;
 }
+
+export type ServiceReminderLevel = "ok" | "upcoming" | "due_soon" | "urgent" | "due_today" | "overdue";
+
+export interface DbMonitoredService {
+  id: string;
+  service_name: string;
+  service_type: string;
+  provider: string | null;
+  environment: string;
+  service_url: string | null;
+  login_url: string | null;
+  hostname: string | null;
+  status: string;
+  health: string;
+  monthly_cost: number;
+  currency: string;
+  billing_cycle: string;
+  next_due_date: string | null;
+  notes: string | null;
+  admin_notes: string | null;
+  last_checked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbServicePaymentReminder {
+  id: string;
+  service_id: string;
+  due_date: string;
+  reminder_level: ServiceReminderLevel;
+  amount: number | null;
+  currency: string;
+  status: string;
+  completed_at: string | null;
+  completed_by: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbServiceCheckLog {
+  id: string;
+  service_id: string;
+  checked_at: string;
+  health: string;
+  status_code: number | null;
+  response_time_ms: number | null;
+  reminder_level: ServiceReminderLevel | null;
+  message: string | null;
+  created_at: string;
+}

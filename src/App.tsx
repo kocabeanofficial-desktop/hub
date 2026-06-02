@@ -19,6 +19,7 @@ import ZohoImports from "./pages/admin/ZohoImports";
 import ActivityLog from "./pages/admin/ActivityLog";
 import Renewals from "./pages/admin/Renewals";
 import RenewalDetail from "./pages/admin/RenewalDetail";
+import MonitoringServices from "./pages/admin/MonitoringServices";
 import WebsiteContent from "./pages/admin/WebsiteContent";
 import PageContentEditor from "./pages/admin/PageContentEditor";
 import ClientDashboard from "./pages/client/ClientDashboard";
@@ -101,6 +102,7 @@ const App: React.FC = () => (
             <Route path="/admin/activity" element={<ProtectedRoute role="admin"><ActivityLog /></ProtectedRoute>} />
             <Route path="/admin/renewals" element={<ProtectedRoute role="admin"><Renewals /></ProtectedRoute>} />
             <Route path="/admin/renewals/:renewalId" element={<ProtectedRoute role="admin"><RenewalDetail /></ProtectedRoute>} />
+            <Route path="/admin/monitoring/services" element={<ProtectedRoute role="admin"><MonitoringServices /></ProtectedRoute>} />
             <Route path="/admin/websites/:websiteId/content" element={<ProtectedRoute role="admin"><WebsiteContent /></ProtectedRoute>} />
             <Route path="/admin/websites/:websiteId/content/:pageId" element={<ProtectedRoute role="admin"><PageContentEditor /></ProtectedRoute>} />
             {/* Client routes — accessible to any authenticated user (admins included for testing) */}
