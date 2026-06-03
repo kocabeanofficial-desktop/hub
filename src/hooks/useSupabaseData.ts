@@ -4,6 +4,7 @@ import type {
   DbClient, DbContact, DbProject, DbTask,
   DbReport, DbIntakeSubmission, DbAutomationEvent,
   DbService, DbClientService, DbHostingAccount, DbDomain, DbMailbox,
+  DbWhmAccount, DbWhmDomainObservation, DbWhmServer, DbWhmSyncRun,
 } from "@/types/database";
 
 async function fetchTable<T>(table: string, orderBy = "created_at"): Promise<T[]> {
@@ -180,6 +181,18 @@ export const useDomains = () =>
 
 export const useMailboxes = () =>
   useQuery({ queryKey: ["mailboxes"], queryFn: () => fetchTable<DbMailbox>("mailboxes") });
+
+export const useWhmServers = () =>
+  useQuery({ queryKey: ["whm_servers"], queryFn: () => fetchTable<DbWhmServer>("whm_servers") });
+
+export const useWhmSyncRuns = () =>
+  useQuery({ queryKey: ["whm_sync_runs"], queryFn: () => fetchTable<DbWhmSyncRun>("whm_sync_runs", "started_at") });
+
+export const useWhmAccounts = () =>
+  useQuery({ queryKey: ["whm_accounts"], queryFn: () => fetchTable<DbWhmAccount>("whm_accounts", "last_synced_at") });
+
+export const useWhmDomainObservations = () =>
+  useQuery({ queryKey: ["whm_domain_observations"], queryFn: () => fetchTable<DbWhmDomainObservation>("whm_domain_observations") });
 
 export const useClientHostingAccounts = (clientId: string | undefined) =>
   useQuery({

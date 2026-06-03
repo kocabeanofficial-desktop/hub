@@ -238,6 +238,64 @@ export interface DbMailbox {
   updated_at: string;
 }
 
+export interface DbWhmServer {
+  id: string;
+  label: string;
+  base_url_alias: string | null;
+  is_active: boolean;
+  last_sync_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbWhmSyncRun {
+  id: string;
+  server_id: string | null;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  accounts_seen: number;
+  domains_seen: number;
+  matched_accounts: number;
+  unmatched_accounts: number;
+  error_summary: string | null;
+  created_at: string;
+}
+
+export interface DbWhmAccount {
+  id: string;
+  server_id: string | null;
+  sync_run_id: string | null;
+  whm_user: string;
+  primary_domain: string | null;
+  owner: string | null;
+  plan: string | null;
+  ip_address: string | null;
+  status: string | null;
+  raw_status: string | null;
+  disk_used_mb: number | null;
+  disk_quota_mb: number | null;
+  bandwidth_used_mb: number | null;
+  bandwidth_quota_mb: number | null;
+  match_status: string;
+  matched_client_id: string | null;
+  match_confidence: number | null;
+  last_seen_at: string;
+  last_synced_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbWhmDomainObservation {
+  id: string;
+  whm_account_id: string;
+  domain_name: string;
+  domain_type: string | null;
+  document_root: string | null;
+  last_seen_at: string;
+  created_at: string;
+}
+
 export interface DbClientRelationship {
   id: string;
   source_client_id: string;
