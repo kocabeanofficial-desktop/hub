@@ -9,8 +9,9 @@ import {
   useWhmAccounts,
   useWhmSyncRuns,
 } from "@/hooks/useSupabaseData";
-import { Server, Globe, Mail, ShieldAlert, AlertTriangle, Loader2, Activity, CheckCircle2, HelpCircle, Link2Off, XCircle } from "lucide-react";
+import { Server, Globe, Mail, ShieldAlert, AlertTriangle, Loader2, Activity, CheckCircle2, HelpCircle, Link2Off, XCircle, Ban, HardDrive } from "lucide-react";
 import { useMemo } from "react";
+import type { DbWhmAccount } from "@/types/database";
 
 const hostingStatusColors: Record<string, string> = {
   active: "bg-success/10 text-success border-success/20",
@@ -33,12 +34,67 @@ const matchStatusColors: Record<string, string> = {
   conflict: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
+const riskBadgeColors: Record<string, string> = {
+  healthy: "bg-success/10 text-success border-success/20",
+  warning: "bg-warning/10 text-warning border-warning/20",
+  critical: "bg-orange-100 text-orange-700 border-orange-200",
+  over: "bg-destructive/10 text-destructive border-destructive/20",
+  suspended: "bg-destructive/10 text-destructive border-destructive/20",
+};
+
 const StatusPill = ({ status, colorMap }: { status: string; colorMap: Record<string, string> }) => {
   const style = colorMap[status] || "bg-muted text-muted-foreground border-border";
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${style}`}>
       {status.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())}
     </span>
+  );
+};
+
+const RiskBadge = ({ label, level }: { label: string; level: string }) => (
+  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${riskBadgeColors[level] || riskBadgeColors.warning}`}>
+    {label}
+  </span>
+);
+
+const MonitoringCard = ({
+  title,
+  value,
+  tone,
+}: {
+  title: string;
+  value: number;
+  tone: "healthy" | "warning" | "critical" | "over";
+}) => {
+  const style =
+    tone === "healthy"
+      ? "bg-success/[0.04] border-success/15"
+      : tone === "warning"
+      ? "bg-warning/[0.05] border-warning/20"
+      : tone === "critical"
+      ? "bg-orange-50 border-orange-200"
+      : "bg-destructive/[0.05] border-destructive/20";
+  const iconStyle =
+    tone === "healthy"
+      ? "bg-success/10 text-success"
+      : tone === "warning"
+      ? "bg-warning/10 text-warning"
+      : tone === "critical"
+      ? "bg-orange-100 text-orange-700"
+      : "bg-destructive/10 text-destructive";
+
+  return (
+    <div className={`rounded-2xl p-4 sm:p-5 border ${style}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 min-w-0">
+          <p className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{value}</p>
+        </div>
+        <div className={`rounded-xl p-2.5 ${iconStyle}`}>
+          {title.toLowerCase().includes("suspended") ? <Ban className="h-5 w-5" /> : <HardDrive className="h-5 w-5" />}
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -52,6 +108,55 @@ const formatUsage = (used: number | null, quota: number | null) => {
   if (used == null && quota == null) return "—";
   if (quota == null || quota <= 0) return `${formatNumber(used)} MB`;
   return `${formatNumber(used)} / ${formatNumber(quota)} MB`;
+};
+
+const calculateUsagePercent = (used: number | null, quota: number | null) => {
+  if (used == null || quota == null || quota <= 0) return null;
+  return (used / quota) * 100;
+};
+
+const formatPercent = (value: number | null) =>
+  value == null || !Number.isFinite(value) ? "—" : `${Math.round(value)}%`;
+
+const classifyUsage = (percent: number | null) => {
+  if (percent == null) return null;
+  if (percent >= 100) return "over";
+  if (percent >= 85) return "critical";
+  if (percent >= 70) return "warning";
+  return "healthy";
+};
+
+const isSuspended = (account: DbWhmAccount) => {
+  const combined = [account.status, account.raw_status].filter(Boolean).join(" ").toLowerCase();
+  return combined.includes("suspended") || combined.includes("suspend");
+};
+
+const getAccountRisks = (account: DbWhmAccount) => {
+  const diskPercent = calculateUsagePercent(account.disk_used_mb, account.disk_quota_mb);
+  const bandwidthPercent = calculateUsagePercent(account.bandwidth_used_mb, account.bandwidth_quota_mb);
+  const diskClass = classifyUsage(diskPercent);
+  const bandwidthClass = classifyUsage(bandwidthPercent);
+  const risks: Array<{ label: string; level: string }> = [];
+
+  if (isSuspended(account)) risks.push({ label: "Suspended", level: "suspended" });
+  if (diskClass === "warning") risks.push({ label: "Disk warning", level: "warning" });
+  if (diskClass === "critical") risks.push({ label: "Disk critical", level: "critical" });
+  if (diskClass === "over") risks.push({ label: "Over quota", level: "over" });
+  if (bandwidthClass === "warning") risks.push({ label: "Bandwidth warning", level: "warning" });
+  if (bandwidthClass === "critical") risks.push({ label: "Bandwidth critical", level: "critical" });
+  if (bandwidthClass === "over") risks.push({ label: "Bandwidth over limit", level: "over" });
+
+  return { risks, diskPercent, bandwidthPercent, diskClass, bandwidthClass };
+};
+
+const getRiskRowClass = (account: DbWhmAccount) => {
+  const { risks } = getAccountRisks(account);
+  if (risks.some((risk) => risk.level === "suspended" || risk.level === "over")) return "bg-destructive/5";
+  if (risks.some((risk) => risk.level === "critical")) return "bg-orange-50/80";
+  if (risks.some((risk) => risk.level === "warning")) return "bg-warning/5";
+  if (account.match_status === "conflict") return "bg-destructive/5";
+  if (account.match_status === "unmatched") return "bg-warning/5";
+  return "hover:bg-muted/20 transition-colors";
 };
 
 const Hosting = () => {
@@ -91,6 +196,26 @@ const Hosting = () => {
   );
   const latestWhmAccounts = visibleWhmAccounts.slice(0, 25);
   const syncRunHistory = whmSyncRuns.slice(0, 6);
+  const accountRiskRows = visibleWhmAccounts
+    .map((account) => ({ account, ...getAccountRisks(account) }))
+    .filter((item) => item.risks.length > 0);
+  const diskCounts = visibleWhmAccounts.reduce(
+    (acc, account) => {
+      const level = classifyUsage(calculateUsagePercent(account.disk_used_mb, account.disk_quota_mb));
+      if (level) acc[level] += 1;
+      return acc;
+    },
+    { healthy: 0, warning: 0, critical: 0, over: 0 }
+  );
+  const bandwidthCounts = visibleWhmAccounts.reduce(
+    (acc, account) => {
+      const level = classifyUsage(calculateUsagePercent(account.bandwidth_used_mb, account.bandwidth_quota_mb));
+      if (level === "warning" || level === "critical" || level === "over") acc[level] += 1;
+      return acc;
+    },
+    { warning: 0, critical: 0, over: 0 }
+  );
+  const suspendedAccounts = visibleWhmAccounts.filter(isSuspended).length;
 
   const now = new Date();
   const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -120,6 +245,20 @@ const Hosting = () => {
           <StatCard title="Active Mailboxes" value={activeMailboxes} icon={Mail} variant="success" />
           <StatCard title="SSL Alerts" value={sslAlerts} icon={ShieldAlert} variant={sslAlerts > 0 ? "warning" : "default"} />
         </div>
+
+        {/* Hosting Monitoring */}
+        <section className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+            <MonitoringCard title="Disk Healthy" value={diskCounts.healthy} tone="healthy" />
+            <MonitoringCard title="Disk Warning" value={diskCounts.warning} tone="warning" />
+            <MonitoringCard title="Disk Critical" value={diskCounts.critical} tone="critical" />
+            <MonitoringCard title="Disk Over Quota" value={diskCounts.over} tone="over" />
+            <MonitoringCard title="Suspended Accounts" value={suspendedAccounts} tone={suspendedAccounts > 0 ? "over" : "healthy"} />
+            <MonitoringCard title="Bandwidth Warning" value={bandwidthCounts.warning} tone="warning" />
+            <MonitoringCard title="Bandwidth Critical" value={bandwidthCounts.critical} tone="critical" />
+            <MonitoringCard title="Bandwidth Over Limit" value={bandwidthCounts.over} tone="over" />
+          </div>
+        </section>
 
         {/* WHM Sync Overview */}
         <section className="space-y-3">
@@ -157,6 +296,49 @@ const Hosting = () => {
           </div>
         </section>
 
+        {/* Hosting Risks */}
+        <section className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+          <div className="px-4 py-3.5 border-b border-border flex items-center justify-between gap-3">
+            <h2 className="text-sm font-heading font-bold text-foreground">Hosting Risks</h2>
+            <span className="text-xs text-muted-foreground">{accountRiskRows.length} accounts need attention</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">WHM User</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Primary Domain</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Risk Type</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Disk</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Bandwidth</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Last Synced</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {accountRiskRows.slice(0, 20).map(({ account, risks, diskPercent, bandwidthPercent }) => (
+                  <tr key={account.id} className={getRiskRowClass(account)}>
+                    <td className="px-4 py-3.5 font-medium text-foreground">{account.whm_user}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground">{account.primary_domain || "—"}</td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {risks.map((risk) => <RiskBadge key={`${account.id}-${risk.label}`} label={risk.label} level={risk.level} />)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{formatPercent(diskPercent)}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{formatPercent(bandwidthPercent)}</td>
+                    <td className="px-4 py-3.5"><StatusPill status={account.status || "unknown"} colorMap={hostingStatusColors} /></td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{formatDateTime(account.last_synced_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {accountRiskRows.length === 0 && (
+            <p className="px-4 py-10 text-center text-sm text-muted-foreground">No hosting risks detected.</p>
+          )}
+        </section>
+
         {/* Latest WHM Accounts */}
         <section className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
           <div className="px-4 py-3.5 border-b border-border flex items-center justify-between gap-3">
@@ -173,25 +355,44 @@ const Hosting = () => {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Disk</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden xl:table-cell">Bandwidth</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Risk</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Match</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Matched Client</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden xl:table-cell">Last Synced</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {latestWhmAccounts.map((account) => (
-                  <tr key={account.id} className={account.match_status === "conflict" ? "bg-destructive/5" : account.match_status === "unmatched" ? "bg-warning/5" : "hover:bg-muted/20 transition-colors"}>
-                    <td className="px-4 py-3.5 font-medium text-foreground">{account.whm_user}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{account.primary_domain || "—"}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{account.plan || "—"}</td>
-                    <td className="px-4 py-3.5"><StatusPill status={account.status || "unknown"} colorMap={hostingStatusColors} /></td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{formatUsage(account.disk_used_mb, account.disk_quota_mb)}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden xl:table-cell">{formatUsage(account.bandwidth_used_mb, account.bandwidth_quota_mb)}</td>
-                    <td className="px-4 py-3.5"><StatusPill status={account.match_status} colorMap={matchStatusColors} /></td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{account.matched_client_id ? clientMap[account.matched_client_id] || "Matched client" : "—"}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden xl:table-cell">{formatDateTime(account.last_synced_at)}</td>
-                  </tr>
-                ))}
+                {latestWhmAccounts.map((account) => {
+                  const { risks, diskPercent, bandwidthPercent } = getAccountRisks(account);
+                  return (
+                    <tr key={account.id} className={getRiskRowClass(account)}>
+                      <td className="px-4 py-3.5 font-medium text-foreground">{account.whm_user}</td>
+                      <td className="px-4 py-3.5 text-muted-foreground">{account.primary_domain || "—"}</td>
+                      <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{account.plan || "—"}</td>
+                      <td className="px-4 py-3.5"><StatusPill status={account.status || "unknown"} colorMap={hostingStatusColors} /></td>
+                      <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">
+                        <div>{formatUsage(account.disk_used_mb, account.disk_quota_mb)}</div>
+                        <div className="text-xs">{formatPercent(diskPercent)}</div>
+                      </td>
+                      <td className="px-4 py-3.5 text-muted-foreground hidden xl:table-cell">
+                        <div>{formatUsage(account.bandwidth_used_mb, account.bandwidth_quota_mb)}</div>
+                        <div className="text-xs">{formatPercent(bandwidthPercent)}</div>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        {risks.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {risks.map((risk) => <RiskBadge key={`${account.id}-latest-${risk.label}`} label={risk.label} level={risk.level} />)}
+                          </div>
+                        ) : (
+                          <RiskBadge label="Healthy" level="healthy" />
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5"><StatusPill status={account.match_status} colorMap={matchStatusColors} /></td>
+                      <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{account.matched_client_id ? clientMap[account.matched_client_id] || "Matched client" : "—"}</td>
+                      <td className="px-4 py-3.5 text-muted-foreground hidden xl:table-cell">{formatDateTime(account.last_synced_at)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
