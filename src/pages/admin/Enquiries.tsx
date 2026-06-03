@@ -39,7 +39,7 @@ const serviceCodeFor = (enquiry: DbIntakeSubmission) => {
 };
 
 async function activateEnquiry(enquiry: DbIntakeSubmission) {
-  if (enquiry.client_id || enquiry.project_id || enquiry.status === "activated") return;
+  if (enquiry.client_id || enquiry.project_id) return;
 
   const { serviceType, config } = resolveServiceType(serviceCodeFor(enquiry));
   const businessName = getBusinessName(enquiry) || getContactFullName(enquiry) || "New Client";
@@ -57,7 +57,10 @@ async function activateEnquiry(enquiry: DbIntakeSubmission) {
     })
     .select()
     .single();
-  if (clientError) throw clientError;
+  if (clientError) {
+    console.error("Failed to create client during enquiry activation", clientError);
+    throw new Error("Failed to create client");
+  }
 
   const { error: serviceError } = await supabase
     .from("client_services")
@@ -70,7 +73,10 @@ async function activateEnquiry(enquiry: DbIntakeSubmission) {
       started_at: activationStartedAt,
       billing_cycle: serviceType.startsWith("business_email") ? "monthly" : serviceType === "email_migration_setup" ? "once_off" : null,
     });
-  if (serviceError) throw serviceError;
+  if (serviceError) {
+    console.error("Failed to create service during enquiry activation", serviceError);
+    throw new Error("Failed to create service");
+  }
 
   let projectId: string | null = null;
   if (config.requiresProject && config.projectType) {
@@ -86,7 +92,10 @@ async function activateEnquiry(enquiry: DbIntakeSubmission) {
       })
       .select("id")
       .single();
-    if (projectError) throw projectError;
+    if (projectError) {
+      console.error("Failed to create project during enquiry activation", projectError);
+      throw new Error("Failed to create project");
+    }
     projectId = project.id;
   }
 
@@ -94,7 +103,10 @@ async function activateEnquiry(enquiry: DbIntakeSubmission) {
     .from("intake_submissions")
     .update({ status: "activated", client_id: client.id, project_id: projectId })
     .eq("id", enquiry.id);
-  if (updateError) throw updateError;
+  if (updateError) {
+    console.error("Failed to update enquiry during activation", updateError);
+    throw new Error("Failed to update enquiry");
+  }
 }
 
 const Enquiries = () => {
@@ -356,30 +368,43 @@ const Enquiries = () => {
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">No enquiries found.</td>
                   </tr>
-                ) : filtered.map((enq) => (
-                  <tr
-                    key={enq.id}
-                    className="hover:bg-muted/20 transition-colors cursor-pointer"
-                    onClick={() => setSelected(enq)}
-                  >
-                    <td className="px-4 py-3.5 text-center" onClick={(event) => event.stopPropagation()}>
-                      <Checkbox
-                        className="mx-auto border-2 border-primary/70 bg-background shadow-sm"
-                        checked={selectedIds.includes(enq.id)}
-                        onCheckedChange={() => toggleOne(enq.id)}
-                        aria-label={`Select enquiry ${getContactFullName(enq) || enq.id}`}
-                      />
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <p className="font-medium text-foreground">{getContactFullName(enq) || "Unknown"}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{getContactEmail(enq) || "No email"}</p>
-                    </td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{getBusinessName(enq) || "-"}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{getReviewField(enq, "selected_package") || enq.business_type || "-"}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(enq.created_at).toLocaleDateString("en-ZA")}</td>
-                    <td className="px-4 py-3.5"><StatusBadge status={enq.status} /></td>
-                  </tr>
-                ))}
+                ) : filtered.map((enq) => {
+                  const activationIncomplete = enq.status === "activated" && !enq.client_id;
+                  return (
+                    <tr
+                      key={enq.id}
+                      className="hover:bg-muted/20 transition-colors cursor-pointer"
+                      onClick={() => setSelected(enq)}
+                    >
+                      <td className="px-4 py-3.5 text-center" onClick={(event) => event.stopPropagation()}>
+                        <Checkbox
+                          className="mx-auto border-2 border-primary/70 bg-background shadow-sm"
+                          checked={selectedIds.includes(enq.id)}
+                          onCheckedChange={() => toggleOne(enq.id)}
+                          aria-label={`Select enquiry ${getContactFullName(enq) || enq.id}`}
+                        />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <p className="font-medium text-foreground">{getContactFullName(enq) || "Unknown"}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{getContactEmail(enq) || "No email"}</p>
+                      </td>
+                      <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">{getBusinessName(enq) || "-"}</td>
+                      <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{getReviewField(enq, "selected_package") || enq.business_type || "-"}</td>
+                      <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{new Date(enq.created_at).toLocaleDateString("en-ZA")}</td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex flex-col items-start gap-1.5">
+                          <StatusBadge status={activationIncomplete ? "activation incomplete" : enq.status} />
+                          {activationIncomplete && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                              <AlertTriangle className="h-3 w-3" />
+                              No client link
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

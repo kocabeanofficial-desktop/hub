@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Copy, Download, Loader2, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Copy, Download, Loader2, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { DeleteEnquiriesDialog } from "@/components/enquiries/DeleteEnquiriesDialog";
@@ -472,6 +472,15 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
   };
 
   const handleStatusChange = async (newStatus: string) => {
+    if (newStatus === "activated" && !enq.client_id) {
+      toast({
+        title: "Use activation action",
+        description: "Create and link the client before marking this enquiry as activated.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const { error } = await supabase.from("intake_submissions").update({ status: newStatus }).eq("id", enq.id);
     if (error) {
       toast({ title: "Status update failed", description: error.message, variant: "destructive" });
@@ -507,7 +516,10 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
         })
         .select()
         .single();
-      if (clientError) throw clientError;
+      if (clientError) {
+        console.error("Failed to create client during enquiry activation", clientError);
+        throw new Error("Failed to create client");
+      }
 
       const { error: serviceError } = await supabase
         .from("client_services")
@@ -521,7 +533,10 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
           billing_cycle: isBusinessEmail ? "monthly" : "once_off",
           notes: isEmailService ? zohoInvoiceCopy : values.notes || null,
         });
-      if (serviceError) throw serviceError;
+      if (serviceError) {
+        console.error("Failed to create service during enquiry activation", serviceError);
+        throw new Error("Failed to create service");
+      }
 
       let projectId: string | null = null;
       if (config.requiresProject && config.projectType) {
@@ -537,7 +552,10 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
           })
           .select("id")
           .single();
-        if (projectError) throw projectError;
+        if (projectError) {
+          console.error("Failed to create project during enquiry activation", projectError);
+          throw new Error("Failed to create project");
+        }
         projectId = project.id;
       }
 
@@ -550,7 +568,10 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
           raw_payload: updateRawPayloadWithReview(enq, values),
         })
         .eq("id", enq.id);
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Failed to update enquiry during activation", updateError);
+        throw new Error("Failed to update enquiry");
+      }
 
       invalidate();
       setEnq({ ...enq, status: "activated", client_id: client.id, project_id: projectId });
@@ -559,7 +580,7 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
         description: config.requiresProject ? `${config.label} project created.` : `${config.label} service created. No project created.`,
       });
     } catch (error) {
-      toast({ title: "Failed to activate", description: (error as Error).message, variant: "destructive" });
+      toast({ title: "Activation failed", description: (error as Error).message, variant: "destructive" });
     } finally {
       setConverting(false);
     }
@@ -617,6 +638,7 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
 
   const serviceFields = isMigration ? MIGRATION_FIELDS : BUSINESS_EMAIL_FIELDS;
   const activationLabel = isEmailService ? "Activate - Create Client + Service" : "Activate - Create Client + Project";
+  const activationIncomplete = enq.status === "activated" && !enq.client_id;
   const displayValueForKey = (key: string, value: string) =>
     ["selected_package", "package_label", "domain_choice", "domain_access_status", "epp_auth_code_status", "domain_check_status", "old_emails_need_moving", "domain_login_access", "email_hosting_login_access"].includes(key)
       ? intakeReview.displayLabel(value)
@@ -637,7 +659,15 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
             {values.email || "No email"} / {values.whatsapp_number || "No phone"} / Submitted {new Date(enq.created_at).toLocaleDateString("en-ZA")}
           </p>
         </div>
-        <StatusBadge status={enq.status} />
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <StatusBadge status={activationIncomplete ? "activation incomplete" : enq.status} />
+          {activationIncomplete && (
+            <div className="flex items-center gap-1.5 rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Activation incomplete - no linked client record
+            </div>
+          )}
+        </div>
       </div>
 
       <SectionCard title="Actions">
@@ -653,6 +683,7 @@ export function EnquiryDetailPage({ enquiry: enqProp, archiveSupported = true, o
               size="sm"
               variant={enq.status === status ? "default" : "outline"}
               className="capitalize rounded-xl text-xs"
+              disabled={status === "activated" && !enq.client_id}
               onClick={() => handleStatusChange(status)}
             >
               {status}

@@ -142,7 +142,7 @@ export function IceboxTab() {
   };
 
   const handleActivate = async (s: DbIntakeSubmission) => {
-    if (s.status === "activated" || s.client_id || s.project_id) {
+    if (s.client_id || s.project_id) {
       toast({
         title: "Already activated",
         description: "This intake is already linked to a client or project. Refresh before trying again.",
@@ -170,7 +170,10 @@ export function IceboxTab() {
         })
         .select("id")
         .single();
-      if (cErr) throw cErr;
+      if (cErr) {
+        console.error("Failed to create client during icebox activation", cErr);
+        throw new Error("Failed to create client");
+      }
 
       const { error: serviceErr } = await supabase
         .from("client_services")
@@ -183,7 +186,10 @@ export function IceboxTab() {
           started_at: activationStartedAt,
           billing_cycle: serviceType.startsWith("business_email") ? "monthly" : serviceType === EMAIL_MIGRATION_PACKAGE.selectedPackage ? "once_off" : null,
         });
-      if (serviceErr) throw serviceErr;
+      if (serviceErr) {
+        console.error("Failed to create service during icebox activation", serviceErr);
+        throw new Error("Failed to create service");
+      }
 
       let projectId: string | null = null;
 
@@ -201,7 +207,10 @@ export function IceboxTab() {
           })
           .select("id")
           .single();
-        if (pErr) throw pErr;
+        if (pErr) {
+          console.error("Failed to create project during icebox activation", pErr);
+          throw new Error("Failed to create project");
+        }
         projectId = newProject.id;
       }
 
@@ -214,7 +223,10 @@ export function IceboxTab() {
           project_id: projectId,
         })
         .eq("id", s.id);
-      if (uErr) throw uErr;
+      if (uErr) {
+        console.error("Failed to update enquiry during icebox activation", uErr);
+        throw new Error("Failed to update enquiry");
+      }
 
       invalidate();
       toast({
