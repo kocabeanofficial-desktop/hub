@@ -126,10 +126,30 @@ const classifyUsage = (percent: number | null) => {
   return "healthy";
 };
 
+const normalizeStatusValue = (value: string | null | undefined) => value?.trim().toLowerCase() || "";
+
 const isSuspended = (account: DbWhmAccount) => {
-  const combined = [account.status, account.raw_status].filter(Boolean).join(" ").toLowerCase();
-  return combined.includes("suspended") || combined.includes("suspend");
+  const status = normalizeStatusValue(account.status);
+  const rawStatus = normalizeStatusValue(account.raw_status);
+
+  if (status === "suspended") return true;
+  if (["not suspended", "unsuspended", "active", "not_suspended"].includes(rawStatus)) return false;
+
+  return ["suspended", "true", "1"].includes(rawStatus);
 };
+
+const getSuspensionReason = (account: DbWhmAccount) => {
+  if (!isSuspended(account)) return "â€”";
+
+  const rawStatus = normalizeStatusValue(account.raw_status);
+  if (!rawStatus || ["suspended", "true", "1", "not suspended", "unsuspended", "active", "not_suspended"].includes(rawStatus)) {
+    return "Reason not captured";
+  }
+
+  return account.raw_status;
+};
+
+const getSuspensionDate = (account: DbWhmAccount) => (isSuspended(account) ? "Date not captured" : "â€”");
 
 const getAccountRisks = (account: DbWhmAccount) => {
   const diskPercent = calculateUsagePercent(account.disk_used_mb, account.disk_quota_mb);
@@ -216,6 +236,10 @@ const Hosting = () => {
     { warning: 0, critical: 0, over: 0 }
   );
   const suspendedAccounts = visibleWhmAccounts.filter(isSuspended).length;
+  const activeWhmAccounts = visibleWhmAccounts.filter((account) => !isSuspended(account)).length;
+  const criticalAlertCount = accountRiskRows.filter((item) =>
+    item.risks.some((risk) => ["suspended", "over", "critical"].includes(risk.level))
+  ).length;
 
   const now = new Date();
   const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -248,7 +272,8 @@ const Hosting = () => {
 
         {/* Hosting Monitoring */}
         <section className="space-y-3">
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-9 gap-3">
+            <MonitoringCard title="Active WHM Accounts" value={activeWhmAccounts} tone="healthy" />
             <MonitoringCard title="Disk Healthy" value={diskCounts.healthy} tone="healthy" />
             <MonitoringCard title="Disk Warning" value={diskCounts.warning} tone="warning" />
             <MonitoringCard title="Disk Critical" value={diskCounts.critical} tone="critical" />
@@ -296,11 +321,18 @@ const Hosting = () => {
           </div>
         </section>
 
-        {/* Hosting Risks */}
-        <section className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+        {/* Hosting Alerts */}
+        <section className={`bg-card rounded-2xl border shadow-sm overflow-hidden ${criticalAlertCount > 0 ? "border-destructive/30" : "border-border"}`}>
           <div className="px-4 py-3.5 border-b border-border flex items-center justify-between gap-3">
-            <h2 className="text-sm font-heading font-bold text-foreground">Hosting Risks</h2>
-            <span className="text-xs text-muted-foreground">{accountRiskRows.length} accounts need attention</span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-heading font-bold text-foreground">Hosting Alerts</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {criticalAlertCount > 0 ? `${criticalAlertCount} critical alerts require review` : "Suspended, over-limit and quota warnings"}
+              </p>
+            </div>
+            <span className={`text-xs font-medium ${criticalAlertCount > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+              {accountRiskRows.length} accounts need attention
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -312,6 +344,7 @@ const Hosting = () => {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Disk</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Bandwidth</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden xl:table-cell">Suspension</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Last Synced</th>
                 </tr>
               </thead>
@@ -328,6 +361,16 @@ const Hosting = () => {
                     <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{formatPercent(diskPercent)}</td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{formatPercent(bandwidthPercent)}</td>
                     <td className="px-4 py-3.5"><StatusPill status={account.status || "unknown"} colorMap={hostingStatusColors} /></td>
+                    <td className="px-4 py-3.5 text-muted-foreground hidden xl:table-cell">
+                      {isSuspended(account) ? (
+                        <div>
+                          <div>{getSuspensionReason(account)}</div>
+                          <div className="text-xs">{getSuspensionDate(account)}</div>
+                        </div>
+                      ) : (
+                        "â€”"
+                      )}
+                    </td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{formatDateTime(account.last_synced_at)}</td>
                   </tr>
                 ))}
