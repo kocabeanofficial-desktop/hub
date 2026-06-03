@@ -484,17 +484,20 @@ Deno.serve(async (req) => {
     }
 
     const finishedAt = new Date().toISOString();
-    const summary = {
+    const syncRunSummary = {
       accounts_seen: accounts.length,
       domains_seen: domainsSeen,
       matched_accounts: matchedAccounts,
       unmatched_accounts: unmatchedAccounts,
+    };
+    const responseSummary = {
+      ...syncRunSummary,
       sync_run_id: syncRunId,
     };
 
     const finalRun = await admin
       .from("whm_sync_runs")
-      .update({ ...summary, status: "success", finished_at: finishedAt })
+      .update({ ...syncRunSummary, status: "success", finished_at: finishedAt })
       .eq("id", syncRunId);
     if (finalRun.error) throw finalRun.error;
 
@@ -504,7 +507,7 @@ Deno.serve(async (req) => {
       .eq("id", serverId);
     if (serverUpdate.error) throw serverUpdate.error;
 
-    return jsonResponse(summary);
+    return jsonResponse(responseSummary);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown sync error";
     console.error("[whm-sync] sync failed");
