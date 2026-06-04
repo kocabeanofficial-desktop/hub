@@ -10,8 +10,68 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const ZOHO_CLIENT_ID = Deno.env.get('ZOHO_CLIENT_ID')!
 const ZOHO_CLIENT_SECRET = Deno.env.get('ZOHO_CLIENT_SECRET')!
+
+type SupabaseClient = ReturnType<typeof createClient>
+type AdminRow = { role?: string; is_active?: boolean }
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
+async function requireAdminCaller(
+  req: Request,
+  admin: SupabaseClient,
+): Promise<{ adminUserId: string } | Response> {
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader?.toLowerCase().startsWith('bearer ')) {
+    return jsonResponse({ error: 'Unauthorized: missing bearer token' }, 401)
+  }
+
+  const token = authHeader.slice(7).trim()
+  const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+
+  const { data: userRes, error: userErr } = await anonClient.auth.getUser(token)
+  if (userErr || !userRes?.user) {
+    return jsonResponse({ error: 'Unauthorized: invalid session' }, 401)
+  }
+
+  const userId = userRes.user.id
+  const { data: adminRow, error: adminErr } = await admin
+    .from('admin_users')
+    .select('role, is_active')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (adminErr) {
+    console.error('[zoho-sync] admin_users lookup failed:', adminErr.message)
+    return jsonResponse({ error: 'Forbidden: admin check failed' }, 403)
+  }
+
+  const activeAdmin = adminRow as AdminRow | null
+  if (!activeAdmin || activeAdmin.is_active !== true) {
+    return jsonResponse({ error: 'Forbidden: active admin role required' }, 403)
+  }
+
+  if (!['admin', 'super_admin'].includes(String(activeAdmin.role))) {
+    return jsonResponse({ error: 'Forbidden: admin role required' }, 403)
+  }
+
+  return { adminUserId: userId }
+}
 
 // Token refresh utility (inline for now - in production, import from separate file)
 async function refreshZohoToken(supabase: any, orgId?: string): Promise<string> {
@@ -19,11 +79,15 @@ async function refreshZohoToken(supabase: any, orgId?: string): Promise<string> 
     .from('zoho_auth_tokens')
     .select('*')
     .eq('is_active', true)
-    .single()
 
   if (orgId) {
     query = query.eq('organization_id', orgId)
   }
+
+  query = query
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
   const { data: tokenRecord, error: fetchError } = await query
 
@@ -88,22 +152,29 @@ interface SyncOptions {
 }
 
 serve(async (req) => {
-  // Authentication check
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return new Response(
-      JSON.stringify({ error: 'Unauthorized' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
-    )
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed' }, 405)
+  }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+
+  const adminCheck = await requireAdminCaller(req, supabase)
+  if (adminCheck instanceof Response) return adminCheck
 
   try {
     // Parse request body for options
-    const options: SyncOptions = req.method === 'POST' 
-      ? await req.json()
-      : { syncCustomers: true, syncInvoices: true, fullSync: false }
+    let options: SyncOptions = { syncCustomers: true, syncInvoices: true, fullSync: false }
+    try {
+      options = await req.json()
+    } catch {
+      options = { syncCustomers: true, syncInvoices: true, fullSync: false }
+    }
 
     const results = {
       customers: { fetched: 0, created: 0, updated: 0 },
@@ -119,7 +190,9 @@ serve(async (req) => {
       .from('zoho_auth_tokens')
       .select('organization_id, api_domain')
       .eq('is_active', true)
-      .single()
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
     if (!tokenData) {
       throw new Error('No active Zoho organization found')
@@ -183,14 +256,15 @@ serve(async (req) => {
         }).eq('id', customerSyncLog.data.id)
 
       } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown customers sync error'
         await supabase.from('zoho_sync_log').update({
           status: 'failed',
-          error_message: error.message,
+          error_message: message,
           completed_at: new Date().toISOString(),
           duration_ms: Date.now() - startTime,
         }).eq('id', customerSyncLog.data.id)
 
-        results.errors.push(`Customers sync failed: ${error.message}`)
+        results.errors.push(`Customers sync failed: ${message}`)
       }
     }
 
@@ -263,31 +337,27 @@ serve(async (req) => {
         }).eq('id', invoiceSyncLog.data.id)
 
       } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown invoices sync error'
         await supabase.from('zoho_sync_log').update({
           status: 'failed',
-          error_message: error.message,
+          error_message: message,
           completed_at: new Date().toISOString(),
           duration_ms: Date.now() - startTime,
         }).eq('id', invoiceSyncLog.data.id)
 
-        results.errors.push(`Invoices sync failed: ${error.message}`)
+        results.errors.push(`Invoices sync failed: ${message}`)
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        success: results.errors.length === 0,
-        results,
-        timestamp: new Date().toISOString(),
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    )
+    return jsonResponse({
+      success: results.errors.length === 0,
+      results,
+      timestamp: new Date().toISOString(),
+    })
 
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown sync error'
     console.error('Sync error:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    )
+    return jsonResponse({ error: message }, 500)
   }
 })

@@ -36,12 +36,18 @@ serve(async (req) => {
   try {
     const url = new URL(req.url)
     const code = url.searchParams.get('code')
-    const location = url.searchParams.get('location')
     const accountsServer = url.searchParams.get('accounts-server')
 
     if (!code) {
       return new Response(
         JSON.stringify({ error: 'Missing authorization code' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!accountsServer || !/^https:\/\/accounts\.zoho\.[a-z.]+$/i.test(accountsServer)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid Zoho accounts server' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }
@@ -89,10 +95,24 @@ serve(async (req) => {
       throw new Error('No organization found in Zoho Invoice account')
     }
 
-    // Store tokens in Supabase
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    // Store tokens in Supabase. Only one token row should be active per Zoho org.
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
 
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
+
+    const now = new Date().toISOString()
+    const { error: deactivateError } = await supabase
+      .from('zoho_auth_tokens')
+      .update({ is_active: false, updated_at: now })
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+
+    if (deactivateError) {
+      console.error('Failed to deactivate previous Zoho token rows:', deactivateError.message)
+      throw new Error('Failed to prepare Zoho token storage')
+    }
 
     const { error: dbError } = await supabase.from('zoho_auth_tokens').insert({
       organization_id: organizationId,
@@ -101,6 +121,7 @@ serve(async (req) => {
       expires_at: expiresAt.toISOString(),
       api_domain: tokens.api_domain,
       is_active: true,
+      updated_at: now,
     })
 
     if (dbError) {
@@ -127,9 +148,10 @@ serve(async (req) => {
     )
 
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown OAuth callback error'
     console.error('OAuth callback error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }

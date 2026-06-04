@@ -3,3 +3,12 @@ project_id = "yxccaoiznqklgnxdsdlr"
 
 [analytics]
 enabled = false
+
+[functions.zoho-oauth-callback]
+verify_jwt = false
+
+[functions.zoho-sync]
+verify_jwt = true
+
+[functions.zoho-csv-import]
+verify_jwt = true
