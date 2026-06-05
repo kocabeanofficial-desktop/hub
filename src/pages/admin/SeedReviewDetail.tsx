@@ -76,6 +76,39 @@ const adminDecisionOptions = [
   "defer",
 ] as const;
 
+const stagingWorkflowActions = [
+  {
+    label: "Mark Deferred",
+    review_status: "deferred",
+    admin_decision: "defer",
+  },
+  {
+    label: "Mark Ignored",
+    review_status: "ignored",
+    admin_decision: "ignore",
+  },
+  {
+    label: "Mark Conflict",
+    review_status: "conflict",
+    admin_decision: null,
+  },
+  {
+    label: "Mark Manual Create Required",
+    review_status: "manual_create_required",
+    admin_decision: "create_client_manually",
+  },
+  {
+    label: "Mark Confirmed Existing Client",
+    review_status: "confirmed_existing_client",
+    admin_decision: "attach_to_existing",
+  },
+  {
+    label: "Reset to Pending Review",
+    review_status: "pending_review",
+    admin_decision: null,
+  },
+] as const;
+
 const formatLabel = (value: string | null | undefined) => {
   if (!value) return "-";
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -217,6 +250,7 @@ const SeedReviewDetail = () => {
   const decodedProposalId = proposalId ? decodeURIComponent(proposalId) : "";
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [workflowAction, setWorkflowAction] = useState<string | null>(null);
   const [form, setForm] = useState<ProposalReviewForm | null>(null);
 
   const { data: proposal, isLoading, error, refetch } = useQuery({
@@ -299,6 +333,38 @@ const SeedReviewDetail = () => {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const applyStagingWorkflowAction = async (action: typeof stagingWorkflowActions[number]) => {
+    if (!proposal) return;
+
+    setWorkflowAction(action.label);
+    try {
+      const { error: actionError } = await supabase
+        .from("seed_reconciliation_proposals")
+        .update({
+          review_status: action.review_status,
+          admin_decision: action.admin_decision,
+        })
+        .eq("id", proposal.id);
+
+      if (actionError) throw actionError;
+
+      await refetch();
+      setIsEditing(false);
+      toast({
+        title: "Staging status updated",
+        description: `${action.label} updated only the seed reconciliation proposal row.`,
+      });
+    } catch (actionError) {
+      toast({
+        title: "Status update failed",
+        description: actionError instanceof Error ? actionError.message : "Could not update the staged proposal status.",
+        variant: "destructive",
+      });
+    } finally {
+      setWorkflowAction(null);
     }
   };
 
@@ -552,6 +618,29 @@ const SeedReviewDetail = () => {
             </div>
           </DetailCard>
         </div>
+
+        <DetailCard title="Staging Review Actions" icon={ShieldAlert}>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              These buttons update the staging proposal status only. They do not create, link, or update any real KBCC records.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {stagingWorkflowActions.map((action) => (
+                <Button
+                  key={action.label}
+                  type="button"
+                  variant={action.review_status === "conflict" ? "destructive" : "outline"}
+                  size="sm"
+                  onClick={() => applyStagingWorkflowAction(action)}
+                  disabled={isSaving || workflowAction !== null}
+                >
+                  {workflowAction === action.label ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </DetailCard>
 
         <DetailCard title="Raw Payload Preview" icon={FileJson}>
           <details>
