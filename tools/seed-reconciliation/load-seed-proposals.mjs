@@ -2,10 +2,15 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
 
 const DEFAULT_INPUT_FILE = "D:\\KBCC-SEED-RECONCILIATION\\outputs\\initial-server-client-seed-proposals-2026-06-05.json";
 const OUTPUT_DIR = "D:\\KBCC-SEED-RECONCILIATION\\outputs";
+const LOCAL_DB_CONTAINER_PREFIX = "supabase_db_";
+
+const execFileAsync = promisify(execFile);
 
 const REQUIRED_FIELDS = [
   "proposal_id",
@@ -49,7 +54,7 @@ const ALLOWED_ADMIN_DECISION = new Set([
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseArgs(argv) {
-  const args = { file: DEFAULT_INPUT_FILE };
+  const args = { file: DEFAULT_INPUT_FILE, checkDb: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--file") {
@@ -57,8 +62,12 @@ function parseArgs(argv) {
       if (!value) throw new Error("--file requires a path");
       args.file = value;
       i += 1;
+    } else if (arg === "--check-db") {
+      args.checkDb = true;
+    } else if (arg === "--apply") {
+      throw new Error("Apply mode is not implemented in this phase.");
     } else {
-      throw new Error(`Unsupported argument: ${arg}. This validator supports only --file <path>.`);
+      throw new Error(`Unsupported argument: ${arg}. This validator supports only --file <path> and --check-db.`);
     }
   }
   return args;
@@ -119,15 +128,7 @@ function timestampForFile(date = new Date()) {
   ].join("");
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const inputPath = path.resolve(args.file);
-  const generatedAt = new Date().toISOString();
-  const reportPath = path.join(
-    OUTPUT_DIR,
-    `seed-proposal-load-validation-report-${timestampForFile(new Date())}.json`,
-  );
-
+async function loadProposalRows(inputPath) {
   if (!existsSync(inputPath)) {
     throw new Error(`Input file not found: ${inputPath}`);
   }
@@ -144,6 +145,10 @@ async function main() {
     throw new Error("Input JSON root must be an array.");
   }
 
+  return rows;
+}
+
+function validateRows(rows) {
   const sourceBatchIds = new Set();
   const duplicateKeys = new Map();
   const invalidRows = [];
@@ -235,10 +240,8 @@ async function main() {
 
   const invalidRowKeys = new Set(invalidRows.map((row) => `${row.row_index}:${row.proposal_id}`));
   const invalidRowCount = invalidRowKeys.size;
-  const report = {
-    input_file_path: inputPath,
-    generated_at: generatedAt,
-    mode: "dry-run validation/report only",
+
+  return {
     total_rows: rows.length,
     source_batch_ids: [...sourceBatchIds].sort(),
     duplicate_count: duplicateEntries.reduce((sum, entry) => sum + entry.count - 1, 0),
@@ -258,7 +261,130 @@ async function main() {
       "blank UUID-ish fields would become null before database load",
       "raw_payload would preserve each original proposal row",
     ],
-    safety_statement: "No Supabase client was created. No DB connection, DB write, migration, sync, external call, client creation, domain creation, hosting change, invoice change, DNS change, or ownership link was performed.",
+  };
+}
+
+async function findLocalDbContainer() {
+  const { stdout } = await execFileAsync("docker", [
+    "ps",
+    "--filter",
+    `name=${LOCAL_DB_CONTAINER_PREFIX}`,
+    "--format",
+    "{{.Names}}\t{{.Status}}",
+  ]);
+  const rows = stdout.trim().split(/\r?\n/).filter(Boolean);
+  const healthy = rows
+    .map((line) => {
+      const [name, status] = line.split("\t");
+      return { name, status };
+    })
+    .find((row) => row.name?.startsWith(LOCAL_DB_CONTAINER_PREFIX) && row.status?.toLowerCase().includes("healthy"));
+
+  if (!healthy) {
+    throw new Error("Safe local DB check cannot run: no healthy local Supabase DB container was found.");
+  }
+
+  return healthy.name;
+}
+
+async function localPsql(containerName, sql) {
+  const { stdout } = await execFileAsync("docker", [
+    "exec",
+    containerName,
+    "psql",
+    "-U",
+    "postgres",
+    "-d",
+    "postgres",
+    "-t",
+    "-A",
+    "-c",
+    sql,
+  ]);
+  return stdout.trim();
+}
+
+function sqlTextArray(values) {
+  const escaped = values.map((value) => `'${String(value).replaceAll("'", "''")}'`);
+  return `ARRAY[${escaped.join(",")}]::text[]`;
+}
+
+async function checkLocalDb(validation, rows) {
+  const containerName = await findLocalDbContainer();
+  const tableExists = (await localPsql(
+    containerName,
+    "select to_regclass('public.seed_reconciliation_proposals') is not null;",
+  )) === "t";
+
+  if (!tableExists) {
+    return {
+      local_db_checked: true,
+      staging_table_exists: false,
+      existing_staging_rows_for_batch: 0,
+      would_insert: validation.valid_row_count,
+      would_update: 0,
+      db_check_note: "Staging table does not exist in the local database. No database writes were attempted.",
+    };
+  }
+
+  const batchIds = validation.source_batch_ids;
+  if (batchIds.length === 0) {
+    return {
+      local_db_checked: true,
+      staging_table_exists: true,
+      existing_staging_rows_for_batch: 0,
+      would_insert: 0,
+      would_update: 0,
+      db_check_note: "No source_batch_id values found in JSON. No database writes were attempted.",
+    };
+  }
+
+  const existingOutput = await localPsql(
+    containerName,
+    `select source_batch_id || E'\\t' || proposal_id from public.seed_reconciliation_proposals where source_batch_id = any(${sqlTextArray(batchIds)});`,
+  );
+  const existingKeys = new Set(existingOutput.split(/\r?\n/).filter(Boolean));
+  const validRows = rows.filter((row, index) => {
+    const key = `${index}:${row?.proposal_id ?? ""}`;
+    return !validation.invalid_rows.some((invalid) => `${invalid.row_index}:${invalid.proposal_id}` === key);
+  });
+  const wouldUpdate = validRows.filter((row) => existingKeys.has(`${row.source_batch_id}\t${row.proposal_id}`)).length;
+  const wouldInsert = validRows.length - wouldUpdate;
+
+  return {
+    local_db_checked: true,
+    staging_table_exists: true,
+    existing_staging_rows_for_batch: existingKeys.size,
+    would_insert: wouldInsert,
+    would_update: wouldUpdate,
+    db_check_note: "Read-only local staging table check completed. No database writes were attempted.",
+  };
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const inputPath = path.resolve(args.file);
+  const generatedAt = new Date().toISOString();
+  const reportKind = args.checkDb ? "check" : "validation";
+  const reportPath = path.join(
+    OUTPUT_DIR,
+    `seed-proposal-load-${reportKind}-report-${timestampForFile(new Date())}.json`,
+  );
+
+  const rows = await loadProposalRows(inputPath);
+  const validation = validateRows(rows);
+  const dbCheck = args.checkDb ? await checkLocalDb(validation, rows) : {};
+  const safetyStatement = args.checkDb
+    ? "Local DB read/check mode used read-only metadata/select queries only. No DB write, migration, sync, external call, client creation, domain creation, hosting change, invoice change, DNS change, or ownership link was performed."
+    : "No Supabase client was created. No DB connection, DB write, migration, sync, external call, client creation, domain creation, hosting change, invoice change, DNS change, or ownership link was performed.";
+
+  const report = {
+    input_file_path: inputPath,
+    generated_at: generatedAt,
+    mode: args.checkDb ? "dry-run validation plus local DB read/check only" : "dry-run validation/report only",
+    ...validation,
+    ...dbCheck,
+    safety_statement: safetyStatement,
   };
 
   await mkdir(OUTPUT_DIR, { recursive: true });
@@ -276,6 +402,13 @@ async function main() {
     review_status_breakdown: report.review_status_breakdown,
     proposed_action_breakdown: report.proposed_action_breakdown,
     date_parsing_summary: report.date_parsing_summary,
+    ...(args.checkDb ? {
+      local_db_checked: report.local_db_checked,
+      staging_table_exists: report.staging_table_exists,
+      existing_staging_rows_for_batch: report.existing_staging_rows_for_batch,
+      would_insert: report.would_insert,
+      would_update: report.would_update,
+    } : {}),
     report_file_path: reportPath,
     safety_statement: report.safety_statement,
   }, null, 2));

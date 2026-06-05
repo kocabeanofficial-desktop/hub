@@ -109,3 +109,15 @@ This command is local-only. It does not connect to Supabase, does not write to t
 The validator checks required fields, allowed status values, duplicate `source_batch_id` + `proposal_id` pairs, date parsing, UUID-shaped fields, and how `proposed_actions` would be mapped later. It writes a local validation report to:
 
 `D:\KBCC-SEED-RECONCILIATION\outputs`
+
+## Check proposal load against local staging table
+
+Check the generated proposal JSON against the local `seed_reconciliation_proposals` staging table:
+
+```bash
+npm.cmd run seed:load:check
+```
+
+Check mode is read-only. It validates the proposal file, confirms the local staging table exists, reads existing staging rows for the same `source_batch_id`, and reports how many rows would be inserted or updated by a future loader phase.
+
+No rows are inserted, updated, or deleted. No core KBCC tables are touched.
