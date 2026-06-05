@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Eye, Filter, HelpCircle, ListChecks, Search, ShieldAlert, Timer } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -238,9 +239,11 @@ const SeedReview = () => {
                     <td className="px-4 py-3.5"><Pill value={proposal.review_status} colorMap={statusClass} /></td>
                     <td className="px-4 py-3.5 text-muted-foreground">{formatLabel(proposal.admin_decision)}</td>
                     <td className="px-4 py-3.5 text-right">
-                      <Button type="button" variant="outline" size="sm" disabled>
-                        <Eye className="h-4 w-4" />
-                        View
+                      <Button asChild type="button" variant="outline" size="sm">
+                        <Link to={`/admin/seed-review/${encodeURIComponent(proposal.proposal_id)}`}>
+                          <Eye className="h-4 w-4" />
+                          View
+                        </Link>
                       </Button>
                     </td>
                   </tr>
