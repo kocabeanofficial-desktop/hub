@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, FolderOpen, MessageSquare, FileText,
   Activity, Search, LogOut, Menu, X, Inbox, CheckSquare, Server, Upload,
-  RefreshCw, RadioTower,
+  RefreshCw, RadioTower, ClipboardList,
 } from "lucide-react";
 import kocaBeanLogo from "@/assets/koca-bean-logo.png";
 import { AdminTopbarTools } from "@/components/layout/AdminTopbarTools";
@@ -23,6 +23,7 @@ const adminNav = [
   { label: "Renewals", path: "/admin/renewals", icon: RefreshCw },
   { label: "Monitoring", path: "/admin/monitoring/services", icon: RadioTower },
   { label: "Zoho Staging", path: "/admin/imports", icon: Upload },
+  { label: "Initial Seed Review", path: "/admin/seed-review", icon: ClipboardList },
   { label: "Activity Log", path: "/admin/activity", icon: Activity },
 ];
 

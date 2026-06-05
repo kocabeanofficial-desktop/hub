@@ -16,6 +16,7 @@ import Reports from "./pages/admin/Reports";
 import TaskManager from "./pages/admin/TaskManager";
 import Hosting from "./pages/admin/Hosting";
 import ZohoImports from "./pages/admin/ZohoImports";
+import SeedReview from "./pages/admin/SeedReview";
 import ActivityLog from "./pages/admin/ActivityLog";
 import Renewals from "./pages/admin/Renewals";
 import RenewalDetail from "./pages/admin/RenewalDetail";
@@ -99,6 +100,7 @@ const App: React.FC = () => (
             <Route path="/admin/reports" element={<ProtectedRoute role="admin"><Reports /></ProtectedRoute>} />
             <Route path="/admin/hosting" element={<ProtectedRoute role="admin"><Hosting /></ProtectedRoute>} />
             <Route path="/admin/imports" element={<ProtectedRoute role="admin"><ZohoImports /></ProtectedRoute>} />
+            <Route path="/admin/seed-review" element={<ProtectedRoute role="admin"><SeedReview /></ProtectedRoute>} />
             <Route path="/admin/activity" element={<ProtectedRoute role="admin"><ActivityLog /></ProtectedRoute>} />
             <Route path="/admin/renewals" element={<ProtectedRoute role="admin"><Renewals /></ProtectedRoute>} />
             <Route path="/admin/renewals/:renewalId" element={<ProtectedRoute role="admin"><RenewalDetail /></ProtectedRoute>} />
