@@ -22,7 +22,7 @@ const adminNav = [
   { label: "Hosting", path: "/admin/hosting", icon: Server },
   { label: "Renewals", path: "/admin/renewals", icon: RefreshCw },
   { label: "Monitoring", path: "/admin/monitoring/services", icon: RadioTower },
-  { label: "Imports", path: "/admin/imports", icon: Upload },
+  { label: "Zoho Staging", path: "/admin/imports", icon: Upload },
   { label: "Activity Log", path: "/admin/activity", icon: Activity },
 ];
 

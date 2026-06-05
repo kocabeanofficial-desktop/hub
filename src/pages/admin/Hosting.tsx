@@ -34,6 +34,13 @@ const matchStatusColors: Record<string, string> = {
   conflict: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
+const matchStatusLabels: Record<string, string> = {
+  matched: "Suggested Match",
+  possible_match: "Possible Suggestion",
+  unmatched: "No Suggestion",
+  conflict: "Suggestion Conflict",
+};
+
 const riskBadgeColors: Record<string, string> = {
   healthy: "bg-success/10 text-success border-success/20",
   warning: "bg-warning/10 text-warning border-warning/20",
@@ -42,11 +49,11 @@ const riskBadgeColors: Record<string, string> = {
   suspended: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
-const StatusPill = ({ status, colorMap }: { status: string; colorMap: Record<string, string> }) => {
+const StatusPill = ({ status, colorMap, labels = {} }: { status: string; colorMap: Record<string, string>; labels?: Record<string, string> }) => {
   const style = colorMap[status] || "bg-muted text-muted-foreground border-border";
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${style}`}>
-      {status.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())}
+      {labels[status] || status.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())}
     </span>
   );
 };
@@ -300,8 +307,8 @@ const Hosting = () => {
                   ["Last sync", formatDateTime(latestWhmRun?.finished_at || latestWhmRun?.started_at)],
                   ["Accounts seen", formatNumber(latestWhmRun?.accounts_seen)],
                   ["Domains seen", formatNumber(latestWhmRun?.domains_seen)],
-                  ["Matched", formatNumber(latestWhmRun?.matched_accounts)],
-                  ["Unmatched", formatNumber(latestWhmRun?.unmatched_accounts)],
+                  ["Suggested Match", formatNumber(latestWhmRun?.matched_accounts)],
+                  ["No Suggestion", formatNumber(latestWhmRun?.unmatched_accounts)],
                   ["Status", latestWhmRun?.status ? latestWhmRun.status.replace(/_/g, " ") : "—"],
                 ].map(([label, value]) => (
                   <div key={label} className="bg-card px-4 py-3">
@@ -313,9 +320,9 @@ const Hosting = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <StatCard title="Matched" value={matchCounts.matched || 0} icon={CheckCircle2} variant="success" />
-              <StatCard title="Possible Match" value={matchCounts.possible_match || 0} icon={HelpCircle} variant="info" />
-              <StatCard title="Unmatched" value={matchCounts.unmatched || 0} icon={Link2Off} variant="warning" />
+              <StatCard title="Suggested Match" value={matchCounts.matched || 0} icon={CheckCircle2} variant="success" />
+              <StatCard title="Possible Suggestion" value={matchCounts.possible_match || 0} icon={HelpCircle} variant="info" />
+              <StatCard title="No Suggestion" value={matchCounts.unmatched || 0} icon={Link2Off} variant="warning" />
               <StatCard title="Conflicts" value={matchCounts.conflict || 0} icon={XCircle} variant={matchCounts.conflict > 0 ? "warning" : "default"} />
             </div>
           </div>
@@ -399,8 +406,8 @@ const Hosting = () => {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Disk</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden xl:table-cell">Bandwidth</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Risk</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Match</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Matched Client</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Suggestion</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Suggested Client</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden xl:table-cell">Last Synced</th>
                 </tr>
               </thead>
@@ -430,8 +437,9 @@ const Hosting = () => {
                           <RiskBadge label="Healthy" level="healthy" />
                         )}
                       </td>
-                      <td className="px-4 py-3.5"><StatusPill status={account.match_status} colorMap={matchStatusColors} /></td>
-                      <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{account.matched_client_id ? clientMap[account.matched_client_id] || "Matched client" : "—"}</td>
+                      <td className="px-4 py-3.5"><StatusPill status={account.match_status} colorMap={matchStatusColors} labels={matchStatusLabels} /></td>
+                      {/* Important: matched_client_id is a sync-generated suggested match only. It must not be treated as confirmed ownership unless a future admin review/confirmation workflow writes a separate confirmed link. */}
+                      <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{account.matched_client_id ? clientMap[account.matched_client_id] || "Suggested client" : "—"}</td>
                       <td className="px-4 py-3.5 text-muted-foreground hidden xl:table-cell">{formatDateTime(account.last_synced_at)}</td>
                     </tr>
                   );
@@ -444,10 +452,10 @@ const Hosting = () => {
           )}
         </section>
 
-        {/* WHM Match Review */}
+        {/* WHM Suggested Match Review */}
         <section className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
           <div className="px-4 py-3.5 border-b border-border">
-            <h2 className="text-sm font-heading font-bold text-foreground">Unmatched & Review Needed</h2>
+            <h2 className="text-sm font-heading font-bold text-foreground">No Suggested Match / Review Needed</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -455,7 +463,7 @@ const Hosting = () => {
                 <tr className="border-b border-border bg-muted/40">
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">WHM User</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Domain</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Match Status</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Suggestion Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Confidence</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Last Synced</th>
                 </tr>
@@ -465,7 +473,7 @@ const Hosting = () => {
                   <tr key={account.id} className="bg-warning/5">
                     <td className="px-4 py-3.5 font-medium text-foreground">{account.whm_user}</td>
                     <td className="px-4 py-3.5 text-muted-foreground">{account.primary_domain || "—"}</td>
-                    <td className="px-4 py-3.5"><StatusPill status={account.match_status} colorMap={matchStatusColors} /></td>
+                    <td className="px-4 py-3.5"><StatusPill status={account.match_status} colorMap={matchStatusColors} labels={matchStatusLabels} /></td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">{account.match_confidence == null ? "—" : `${Math.round(account.match_confidence * 100)}%`}</td>
                     <td className="px-4 py-3.5 text-muted-foreground hidden lg:table-cell">{formatDateTime(account.last_synced_at)}</td>
                   </tr>
@@ -474,7 +482,7 @@ const Hosting = () => {
             </table>
           </div>
           {flaggedWhmAccounts.length === 0 && (
-            <p className="px-4 py-10 text-center text-sm text-muted-foreground">No WHM account matches need review.</p>
+            <p className="px-4 py-10 text-center text-sm text-muted-foreground">No WHM suggested matches need review.</p>
           )}
         </section>
 
@@ -492,8 +500,8 @@ const Hosting = () => {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Accounts</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden sm:table-cell">Domains</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Matched</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Unmatched</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Suggested</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">No Suggestion</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden xl:table-cell">Error</th>
                 </tr>
               </thead>

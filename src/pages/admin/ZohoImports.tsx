@@ -90,7 +90,7 @@ const ZohoImports = () => {
         toast({ title: "File loaded", description: `${data.length} rows detected in ${file.name}` });
       },
       error: (err) => {
-        toast({ title: "Could not parse file", description: err.message, variant: "destructive" });
+        toast({ title: "Could not parse staging file", description: err.message, variant: "destructive" });
       },
     });
   };
@@ -170,7 +170,7 @@ const ZohoImports = () => {
 
         if (!response.ok) {
           const text = await response.text().catch(() => "");
-          let message = `Import failed (${response.status})`;
+          let message = `Staging upload failed (${response.status})`;
           try {
             const parsed = text ? JSON.parse(text) : null;
             if (parsed?.error) message = parsed.error;
@@ -194,15 +194,15 @@ const ZohoImports = () => {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Import failed";
+      const message = err instanceof Error ? err.message : "Staging upload failed";
       errors.push(message);
-      toast({ title: "Import failed", description: message, variant: "destructive" });
+      toast({ title: "Staging upload failed", description: message, variant: "destructive" });
     }
 
     setResult({ success, failed, errors: errors.slice(0, 5) });
     setImporting(false);
     if (success > 0) {
-      toast({ title: "Import complete", description: `${success} record(s) imported successfully` });
+      toast({ title: "Staging upload complete", description: `${success} raw record(s) staged successfully` });
     }
   };
 
@@ -212,16 +212,19 @@ const ZohoImports = () => {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-heading font-extrabold text-foreground">Imports</h1>
-          <p className="text-sm text-muted-foreground mt-1">Upload Zoho Books CSV exports to sync customers and invoices, or upload a single invoice PDF.</p>
+          <h1 className="text-xl sm:text-2xl font-heading font-extrabold text-foreground">Zoho Raw Staging</h1>
+          <p className="text-sm text-muted-foreground mt-1">Upload raw Zoho exports for staging and review, or upload a single invoice PDF.</p>
+          <p className="text-xs text-muted-foreground mt-2 max-w-3xl">
+            Raw staging only. This area stores Zoho customer and invoice export data for review. It does not create clients, link clients, assign ownership, or update invoices.
+          </p>
         </div>
 
         <PdfInvoiceUpload />
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">1. Choose what you're importing</CardTitle>
-            <CardDescription>Pick the type of CSV you exported from Zoho Books.</CardDescription>
+            <CardTitle className="text-base">1. Choose staging data</CardTitle>
+            <CardDescription>Pick the type of raw Zoho Books CSV export to stage for review.</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs value={importType} onValueChange={handleTypeChange}>
@@ -237,7 +240,7 @@ const ZohoImports = () => {
           <CardHeader>
             <CardTitle className="text-base">2. Upload your CSV</CardTitle>
             <CardDescription>
-              Export from Zoho Books → {importType === "invoices" ? "Sales → Invoices" : "Contacts → Customers"} → Export as CSV.
+              Export from Zoho Books → {importType === "invoices" ? "Sales → Invoices" : "Contacts → Customers"} → Export as CSV, then stage the raw data here for review.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -341,10 +344,10 @@ const ZohoImports = () => {
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <Button onClick={handleImport} disabled={!requiredOk || importing} size="lg">
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-              {importing ? "Importing…" : `Import ${rows.length} ${importType}`}
+              {importing ? "Staging…" : `Stage ${rows.length} ${importType}`}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Existing records (matched by {importType === "customers" ? "Customer ID" : "Invoice ID"}) will be updated.
+              Existing staged raw records with the same {importType === "customers" ? "Customer ID" : "Invoice ID"} will be updated.
             </p>
           </div>
         )}
@@ -352,9 +355,9 @@ const ZohoImports = () => {
         {result && (
           <Alert variant={result.failed > 0 && result.success === 0 ? "destructive" : "default"}>
             <CheckCircle2 className="h-4 w-4" />
-            <AlertTitle>Import results</AlertTitle>
+            <AlertTitle>Staging upload results</AlertTitle>
             <AlertDescription>
-              <p>✓ {result.success} record(s) imported / updated</p>
+              <p>✓ {result.success} raw record(s) staged / updated</p>
               {result.failed > 0 && <p>✗ {result.failed} record(s) failed</p>}
               {result.errors.length > 0 && (
                 <ul className="mt-2 text-xs list-disc pl-5">

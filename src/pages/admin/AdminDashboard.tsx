@@ -82,11 +82,14 @@ const AdminDashboard = () => {
           </Link>
         </div>
 
-        {/* Finance metrics from Zoho imports */}
+        {/* Finance metrics from raw Zoho staging data */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-heading font-bold text-foreground">Finance (Zoho)</h2>
-            <Link to="/admin/imports" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">Manage imports →</Link>
+            <div>
+              <h2 className="text-sm font-heading font-bold text-foreground">Finance (Zoho Staging)</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Raw Zoho review data only; not a client import workflow.</p>
+            </div>
+            <Link to="/admin/imports" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">Review Zoho staging →</Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <StatCard
