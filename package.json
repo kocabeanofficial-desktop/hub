@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "seed:load:validate": "node tools/seed-reconciliation/load-seed-proposals.mjs",
     "seed:proposals": "node tools/seed-reconciliation/generate-seed-proposals.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

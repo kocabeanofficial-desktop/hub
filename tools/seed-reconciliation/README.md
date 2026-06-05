@@ -95,3 +95,17 @@ Use the proposal output to decide whether to:
 - ignore or defer a row
 
 Do not treat a suggested match as confirmed until an admin has reviewed and recorded the decision.
+
+## Validate proposal load file
+
+Validate the generated proposal JSON before any future database loading step:
+
+```bash
+npm.cmd run seed:load:validate
+```
+
+This command is local-only. It does not connect to Supabase, does not write to the database, and does not import proposals.
+
+The validator checks required fields, allowed status values, duplicate `source_batch_id` + `proposal_id` pairs, date parsing, UUID-shaped fields, and how `proposed_actions` would be mapped later. It writes a local validation report to:
+
+`D:\KBCC-SEED-RECONCILIATION\outputs`
