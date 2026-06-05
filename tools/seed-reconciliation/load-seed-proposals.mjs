@@ -2,7 +2,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -54,7 +54,7 @@ const ALLOWED_ADMIN_DECISION = new Set([
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseArgs(argv) {
-  const args = { file: DEFAULT_INPUT_FILE, checkDb: false };
+  const args = { file: DEFAULT_INPUT_FILE, checkDb: false, apply: false, localOnly: false, confirmStagingOnly: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--file") {
@@ -65,10 +65,23 @@ function parseArgs(argv) {
     } else if (arg === "--check-db") {
       args.checkDb = true;
     } else if (arg === "--apply") {
-      throw new Error("Apply mode is not implemented in this phase.");
+      args.apply = true;
+    } else if (arg === "--local-only") {
+      args.localOnly = true;
+    } else if (arg === "--confirm-staging-only") {
+      args.confirmStagingOnly = true;
     } else {
-      throw new Error(`Unsupported argument: ${arg}. This validator supports only --file <path> and --check-db.`);
+      throw new Error(`Unsupported argument: ${arg}.`);
     }
+  }
+  if (args.apply && !args.checkDb) {
+    throw new Error("Apply mode requires --check-db.");
+  }
+  if (args.apply && !args.localOnly) {
+    throw new Error("Apply mode requires --local-only.");
+  }
+  if (args.apply && !args.confirmStagingOnly) {
+    throw new Error("Apply mode requires --confirm-staging-only.");
   }
   return args;
 }
@@ -304,6 +317,42 @@ async function localPsql(containerName, sql) {
   return stdout.trim();
 }
 
+async function localPsqlStdin(containerName, sql) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("docker", [
+      "exec",
+      "-i",
+      containerName,
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-t",
+      "-A",
+    ], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(`Local psql apply failed with exit code ${code}: ${stderr.trim()}`));
+    });
+    child.stdin.end(sql);
+  });
+}
+
 function sqlTextArray(values) {
   const escaped = values.map((value) => `'${String(value).replaceAll("'", "''")}'`);
   return `ARRAY[${escaped.join(",")}]::text[]`;
@@ -353,6 +402,7 @@ async function checkLocalDb(validation, rows) {
 
   return {
     local_db_checked: true,
+    local_db_container: containerName,
     staging_table_exists: true,
     existing_staging_rows_for_batch: existingKeys.size,
     would_insert: wouldInsert,
@@ -361,11 +411,183 @@ async function checkLocalDb(validation, rows) {
   };
 }
 
+function nullableUuid(value) {
+  if (isBlank(value)) return null;
+  const trimmed = String(value).trim();
+  return UUID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+function nullableText(value) {
+  return isBlank(value) ? null : String(value).trim();
+}
+
+function normalizedDate(value) {
+  const report = parseDateForReport(value);
+  return report.status === "valid" ? report.value : null;
+}
+
+function normalizeForStaging(row) {
+  return {
+    proposal_id: String(row.proposal_id).trim(),
+    source_batch_id: String(row.source_batch_id).trim(),
+    domain_name: nullableText(row.domain_name),
+    contact_name: nullableText(row.contact_name),
+    registrar_status: nullableText(row.registrar_status),
+    auto_renew: nullableText(row.auto_renew),
+    expiry_date: normalizedDate(row.expiry_date),
+    renewal_risk: nullableText(row.renewal_risk),
+    existing_kbcc_domain_id: nullableUuid(row.existing_kbcc_domain_id),
+    existing_kbcc_client_id: nullableUuid(row.existing_kbcc_client_id),
+    existing_kbcc_client_name: nullableText(row.existing_kbcc_client_name),
+    existing_hosting_account_id: nullableUuid(row.existing_hosting_account_id),
+    suggested_client_id: nullableUuid(row.suggested_client_id),
+    suggested_client_name: nullableText(row.suggested_client_name),
+    confidence: nullableText(row.confidence),
+    match_reason: nullableText(row.match_reason),
+    conflict_reasons: nullableText(row.conflict_reasons),
+    proposed_actions: normalizeProposedActions(row.proposed_actions).actions,
+    review_status: nullableText(row.review_status) || "pending_review",
+    admin_decision: nullableText(row.admin_decision),
+    reviewed_by: nullableUuid(row.reviewed_by),
+    reviewed_at: normalizedDate(row.reviewed_at),
+    notes: nullableText(row.notes),
+    raw_payload: row,
+  };
+}
+
+function dollarQuoteJson(value) {
+  const json = JSON.stringify(value);
+  let tag = "seed_payload";
+  while (json.includes(`$${tag}$`)) tag = `${tag}_x`;
+  return `$${tag}$${json}$${tag}$`;
+}
+
+function buildApplySql(rows) {
+  const payload = dollarQuoteJson(rows);
+  return `
+WITH input_rows AS (
+  SELECT value AS raw
+  FROM jsonb_array_elements(${payload}::jsonb)
+),
+upserted AS (
+  INSERT INTO public.seed_reconciliation_proposals (
+    proposal_id,
+    source_batch_id,
+    domain_name,
+    contact_name,
+    registrar_status,
+    auto_renew,
+    expiry_date,
+    renewal_risk,
+    existing_kbcc_domain_id,
+    existing_kbcc_client_id,
+    existing_kbcc_client_name,
+    existing_hosting_account_id,
+    suggested_client_id,
+    suggested_client_name,
+    confidence,
+    match_reason,
+    conflict_reasons,
+    proposed_actions,
+    review_status,
+    admin_decision,
+    reviewed_by,
+    reviewed_at,
+    notes,
+    raw_payload
+  )
+  SELECT
+    raw->>'proposal_id',
+    raw->>'source_batch_id',
+    raw->>'domain_name',
+    raw->>'contact_name',
+    raw->>'registrar_status',
+    raw->>'auto_renew',
+    NULLIF(raw->>'expiry_date', '')::timestamptz,
+    raw->>'renewal_risk',
+    NULLIF(raw->>'existing_kbcc_domain_id', '')::uuid,
+    NULLIF(raw->>'existing_kbcc_client_id', '')::uuid,
+    raw->>'existing_kbcc_client_name',
+    NULLIF(raw->>'existing_hosting_account_id', '')::uuid,
+    NULLIF(raw->>'suggested_client_id', '')::uuid,
+    raw->>'suggested_client_name',
+    raw->>'confidence',
+    raw->>'match_reason',
+    raw->>'conflict_reasons',
+    ARRAY(SELECT jsonb_array_elements_text(COALESCE(raw->'proposed_actions', '[]'::jsonb))),
+    COALESCE(NULLIF(raw->>'review_status', ''), 'pending_review'),
+    NULLIF(raw->>'admin_decision', ''),
+    NULLIF(raw->>'reviewed_by', '')::uuid,
+    NULLIF(raw->>'reviewed_at', '')::timestamptz,
+    raw->>'notes',
+    raw->'raw_payload'
+  FROM input_rows
+  ON CONFLICT (source_batch_id, proposal_id)
+  DO UPDATE SET
+    domain_name = EXCLUDED.domain_name,
+    contact_name = EXCLUDED.contact_name,
+    registrar_status = EXCLUDED.registrar_status,
+    auto_renew = EXCLUDED.auto_renew,
+    expiry_date = EXCLUDED.expiry_date,
+    renewal_risk = EXCLUDED.renewal_risk,
+    existing_kbcc_domain_id = EXCLUDED.existing_kbcc_domain_id,
+    existing_kbcc_client_id = EXCLUDED.existing_kbcc_client_id,
+    existing_kbcc_client_name = EXCLUDED.existing_kbcc_client_name,
+    existing_hosting_account_id = EXCLUDED.existing_hosting_account_id,
+    suggested_client_id = EXCLUDED.suggested_client_id,
+    suggested_client_name = EXCLUDED.suggested_client_name,
+    confidence = EXCLUDED.confidence,
+    match_reason = EXCLUDED.match_reason,
+    conflict_reasons = EXCLUDED.conflict_reasons,
+    proposed_actions = EXCLUDED.proposed_actions,
+    raw_payload = EXCLUDED.raw_payload,
+    updated_at = now()
+  RETURNING 1
+)
+SELECT count(*) FROM upserted;
+`;
+}
+
+async function applyLocalStagingRows(dbCheck, validation, rows) {
+  if (!dbCheck.local_db_checked || !dbCheck.staging_table_exists) {
+    throw new Error("Apply refused: local staging table check failed.");
+  }
+  if (validation.invalid_row_count > 0) {
+    throw new Error("Apply refused: invalid rows exist.");
+  }
+  if (validation.source_batch_ids.length !== 1) {
+    throw new Error("Apply refused: exactly one source_batch_id is required for local staging apply.");
+  }
+
+  const normalizedRows = rows.map(normalizeForStaging);
+  const batchSize = 25;
+  let upserted = 0;
+  for (let index = 0; index < normalizedRows.length; index += batchSize) {
+    const batch = normalizedRows.slice(index, index + batchSize);
+    const result = await localPsqlStdin(dbCheck.local_db_container, buildApplySql(batch));
+    upserted += Number(result || 0);
+  }
+
+  return {
+    destination_table: "public.seed_reconciliation_proposals",
+    source_batch_id: validation.source_batch_ids.join(", "),
+    rows_to_apply: validation.valid_row_count,
+    expected_insert_count: dbCheck.would_insert,
+    expected_update_count: dbCheck.would_update,
+    inserted_or_upserted_count: upserted,
+    invalid_rows: validation.invalid_row_count,
+    duplicate_count: validation.duplicate_count,
+    core_tables_touched: "none",
+    staging_table_only_written: true,
+    no_core_kbcc_tables_touched: true,
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const inputPath = path.resolve(args.file);
   const generatedAt = new Date().toISOString();
-  const reportKind = args.checkDb ? "check" : "validation";
+  const reportKind = args.apply ? "apply-local" : args.checkDb ? "check" : "validation";
   const reportPath = path.join(
     OUTPUT_DIR,
     `seed-proposal-load-${reportKind}-report-${timestampForFile(new Date())}.json`,
@@ -374,16 +596,38 @@ async function main() {
   const rows = await loadProposalRows(inputPath);
   const validation = validateRows(rows);
   const dbCheck = args.checkDb ? await checkLocalDb(validation, rows) : {};
-  const safetyStatement = args.checkDb
+  if (args.apply) {
+    console.log("Destination table:");
+    console.log("public.seed_reconciliation_proposals");
+    console.log("");
+    console.log("Source batch:");
+    console.log(validation.source_batch_ids.join(", "));
+    console.log("");
+    console.log("Rows to apply:");
+    console.log(String(validation.valid_row_count));
+    console.log("");
+    console.log("Core tables touched:");
+    console.log("none");
+    console.log("");
+  }
+  const applyResult = args.apply ? await applyLocalStagingRows(dbCheck, validation, rows) : {};
+  const safetyStatement = args.apply
+    ? "Local apply mode wrote only to public.seed_reconciliation_proposals. No core KBCC tables, remote database, migration, sync, external service, DNS, invoice, hosting, client, domain, service, mailbox, history, or ownership records were touched."
+    : args.checkDb
     ? "Local DB read/check mode used read-only metadata/select queries only. No DB write, migration, sync, external call, client creation, domain creation, hosting change, invoice change, DNS change, or ownership link was performed."
     : "No Supabase client was created. No DB connection, DB write, migration, sync, external call, client creation, domain creation, hosting change, invoice change, DNS change, or ownership link was performed.";
 
   const report = {
     input_file_path: inputPath,
     generated_at: generatedAt,
-    mode: args.checkDb ? "dry-run validation plus local DB read/check only" : "dry-run validation/report only",
+    mode: args.apply
+      ? "local-only staging apply"
+      : args.checkDb
+      ? "dry-run validation plus local DB read/check only"
+      : "dry-run validation/report only",
     ...validation,
     ...dbCheck,
+    ...applyResult,
     safety_statement: safetyStatement,
   };
 
@@ -408,6 +652,15 @@ async function main() {
       existing_staging_rows_for_batch: report.existing_staging_rows_for_batch,
       would_insert: report.would_insert,
       would_update: report.would_update,
+    } : {}),
+    ...(args.apply ? {
+      destination_table: report.destination_table,
+      expected_insert_count: report.expected_insert_count,
+      expected_update_count: report.expected_update_count,
+      inserted_or_upserted_count: report.inserted_or_upserted_count,
+      core_tables_touched: report.core_tables_touched,
+      staging_table_only_written: report.staging_table_only_written,
+      no_core_kbcc_tables_touched: report.no_core_kbcc_tables_touched,
     } : {}),
     report_file_path: reportPath,
     safety_statement: report.safety_statement,

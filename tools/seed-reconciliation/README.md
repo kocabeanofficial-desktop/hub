@@ -121,3 +121,19 @@ npm.cmd run seed:load:check
 Check mode is read-only. It validates the proposal file, confirms the local staging table exists, reads existing staging rows for the same `source_batch_id`, and reports how many rows would be inserted or updated by a future loader phase.
 
 No rows are inserted, updated, or deleted. No core KBCC tables are touched.
+
+## Apply proposal load to local staging table
+
+Apply the validated proposal JSON to the local Supabase staging table only:
+
+```bash
+npm.cmd run seed:load:apply:local
+```
+
+This command is local-only and requires the explicit staging-only confirmation flags baked into the npm script. It upserts rows only into:
+
+`public.seed_reconciliation_proposals`
+
+It does not write to `clients`, `domains`, `hosting_accounts`, `client_services`, `mailboxes`, `client_relationships`, `client_history_notes`, WHM tables, Zoho tables, or any remote/production database.
+
+Do not use this command for remote or production loading. It is only for local staging-table preparation before admin review.

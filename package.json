@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "seed:load:apply:local": "node tools/seed-reconciliation/load-seed-proposals.mjs --check-db --apply --local-only --confirm-staging-only",
     "seed:load:check": "node tools/seed-reconciliation/load-seed-proposals.mjs --check-db",
     "seed:load:validate": "node tools/seed-reconciliation/load-seed-proposals.mjs",
     "seed:proposals": "node tools/seed-reconciliation/generate-seed-proposals.mjs",
