@@ -12,6 +12,7 @@ import { useClientProjects } from "@/hooks/useSupabaseData";
 import { useWebsitesByClient } from "@/hooks/useWebsites";
 import { ClientServicesSection } from "@/components/clients/ClientServicesSection";
 import { ClientHostingSection } from "@/components/clients/ClientHostingSection";
+import { ClientFileReviewPanel } from "@/components/clients/ClientFileReviewPanel";
 import { LegacyClientActivation } from "@/components/clients/LegacyClientActivation";
 import { RelatedClientsSection } from "@/components/clients/RelatedClientsSection";
 import { OriginalIntakeBriefSection } from "@/components/enquiries/OriginalIntakeBriefSection";
@@ -176,6 +177,7 @@ const ClientDetail = () => {
               </div>
             </div>
 
+            <ClientFileReviewPanel client={client} />
             <ClientAccessSection client={client} />
             <LegacyClientActivation client={client} projects={projects} />
             <RelatedClientsSection client={client} />
